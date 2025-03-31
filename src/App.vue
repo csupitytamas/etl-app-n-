@@ -1,31 +1,15 @@
 <template>
-    <div id="app">
-      <router-view></router-view>
-    </div>
+  <div id="app">
+    <router-view />
+  </div>
 </template>
 
-<script>
-import CreateETLPipeline from "./components/CreateETLPipeline.vue";
-
-export default {
-  components: { CreateETLPipeline },
-  data() {
-    return {
-      showETL: false
-    };
-  },
-  methods: {
-    showETLWindow() {
-      this.showETL = true; // Megjeleníti a komponenst
-    }
-  }
-};
+<script setup lang="ts">
 </script>
 
-<style>
-body {
-  font-family: Arial, sans-serif;
-  text-align: center;
+<style scoped>
+#app {
   padding: 20px;
+  font-family: sans-serif;
 }
 </style>

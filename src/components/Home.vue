@@ -1,7 +1,6 @@
 <template>
-  <div>
-    <h1>EZ EGY ETL APP</h1>
-    <button @click="$router.push('/create-etl')">Create New ETL Pipeline</button>
+  <div class="home">
+    <!-- Ez most csak fejlesztésre, de nem kötelező ide -->
   </div>
 </template>
 

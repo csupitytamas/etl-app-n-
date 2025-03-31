@@ -1,6 +1,8 @@
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer } = require('electron');
 
-contextBridge.exposeInMainWorld("electron", {
-    navigate: (route) => ipcRenderer.send("navigate", route),
-    onNavigate: (callback) => ipcRenderer.on("navigate", (_, route) => callback(route)),
+contextBridge.exposeInMainWorld('electron', {
+    ipcRenderer: {
+        on: (channel, func) => ipcRenderer.on(channel, func),
+        send: (channel, ...args) => ipcRenderer.send(channel, ...args),
+    }
 });

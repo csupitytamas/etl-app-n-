@@ -3,15 +3,23 @@ const { Menu, ipcMain } = require("electron");
 function createMenu(mainWindow) {
     const template = [
         {
-            label: "User",
-            submenu: []
+            label: "Home",
+            click: () => {
+                if (mainWindow) {
+                    mainWindow.webContents.send("navigate", "/");
+                }
+            }
         },
         {
             label: "History",
-            submenu: []
+            click: () => {
+                if (mainWindow) {
+                    mainWindow.webContents.send("navigate", "/history");
+                }
+            }
         },
         {
-            label: "ETL",
+            label: "Projects",
             submenu: [
                 {
                     label: "Create new ETL pipeline",
@@ -22,10 +30,10 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
-                    label: "My pipelines",
+                    label: "Active ETL pipelines",
                     click: () => {
                         if (mainWindow) {
-                            mainWindow.webContents.send("navigate", "/my-pipelines");
+                            mainWindow.webContents.send("navigate", "/active-pipelines");
                         }
                     }
                 },
@@ -41,7 +49,11 @@ function createMenu(mainWindow) {
         },
         {
             label: "Settings",
-            submenu: []
+            click: () => {
+                if (mainWindow) {
+                    mainWindow.webContents.send("navigate", "/settings");
+                }
+            }
         }
     ];
 

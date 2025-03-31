@@ -37,7 +37,7 @@ export default {
     return {
       pipelineName: "",
       selectedSource: "",
-      sources: ["Database", "API", "CSV File", "JSON File"], // Példa források
+      sources: ["Database", "API", "CSV File", "JSON File"], // Example sources
     };
   },
   methods: {
@@ -45,7 +45,7 @@ export default {
       alert(`Pipeline Created:\nName: ${this.pipelineName}\nSource: ${this.selectedSource}`);
     },
     openConfiguration() {
-      alert("Configuration settings will be implemented here!");
+      this.$router.push("/etl-config");
     },
   },
 };

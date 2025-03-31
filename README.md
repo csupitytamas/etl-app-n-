@@ -1,12 +1,7 @@
 # etl-app
 
-Step 1: Start the server
-
+ Start the server and the application
 ```sh
 npm run dev
+npm start
 ```
-Step 2: Start the app
-```sh
- npm start
-```
-
