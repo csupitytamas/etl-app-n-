@@ -1,3 +1,4 @@
+
 <template>
   <div class="config-container">
     <h2>Configuration</h2>
@@ -86,6 +87,7 @@
 </template>
 
 <script>
+import draggable from 'vuedraggable';
 export default {
   name: "ETLConfig",
   data() {
