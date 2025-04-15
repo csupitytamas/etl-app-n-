@@ -5,11 +5,11 @@
   "main": "electron/main.js",
   "scripts": {
     "dev": "vite",
-    "start": "concurrently \"npm run dev\" \"npm run electron\"",
     "electron": "electron .",
-    "build": "vite build",
-    "package": "electron-forge package",
-    "make": "electron-forge make"
+    "start": "concurrently \"npm run dev\" \"npm run electron\"",
+    "build": "../node_modules/.bin/vite build",
+    "package": "../node_modules/.bin/electron-forge package",
+    "make": "../node_modules/.bin/electron-forge make"
   },
   "dependencies": {
     "electron": "^35.0.3",
@@ -26,9 +26,9 @@
     "@electron-forge/plugin-fuses": "^7.7.0",
     "@vitejs/plugin-vue": "^5.2.1",
     "@vue/tsconfig": "^0.7.0",
+    "concurrently": "^9.1.2",
     "typescript": "~5.7.2",
     "vite": "^6.2.0",
-    "vue-tsc": "^2.2.4",
-    "concurrently": "^9.1.2"
+    "vue-tsc": "^2.2.4"
   }
 }
