@@ -63,3 +63,6 @@ class ETLConfigResponse(ETLConfigBase):
 
     class Config:
         from_attributes = True
+
+class SourceRequest(BaseModel):
+    source: str

@@ -190,9 +190,11 @@
 
 <script lang="ts">
 import draggable from 'vuedraggable';
-import { defineComponent } from 'vue';
-import { useRouter } from 'vue-router';
+import { defineComponent, onMounted, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { usePipelineStore } from '@/stores/pipelineStore';
+import { loadSchemaBySource } from '@/api/pipeline';
+import axios from 'axios';
 
 export default defineComponent({
   name: 'ETLConfig',
@@ -200,102 +202,156 @@ export default defineComponent({
   setup() {
     const store = usePipelineStore();
     const router = useRouter();
-    return { store, router };
-  },
-  data() {
-    return {
-      schedule: this.store.config.schedule || 'daily',
-      customTime: this.store.config.custom_time || '',
-      conditions: this.store.config.condition || 'none',
-      dependencyPipelineId: this.store.config.dependency_pipeline_id || '',
-      update: this.store.config.update_mode || 'append',
-      saveOption: this.store.config.save_option || 'todatabase',
-      uploadedFileName: this.store.config.uploaded_file_name || '',
-      fileData: null as File | null,
+    const route = useRoute();
 
-      activePipelines: [
-        { id: 'pipeline_1', name: 'Daily Import' },
-        { id: 'pipeline_2', name: 'User Sync' },
-        { id: 'pipeline_3', name: 'Revenue Update' },
-      ],
+    const source = route.query.selectedSource as string;
+    const schedule = ref(store.config.schedule || 'daily');
+    const customTime = ref(store.config.custom_time || '');
+    const conditions = ref(store.config.condition || 'none');
+    const dependencyPipelineId = ref(store.config.dependency_pipeline_id || '');
+    const update = ref(store.config.update_mode || 'append');
+    const saveOption = ref(store.config.save_option || 'todatabase');
+    const uploadedFileName = ref(store.config.uploaded_file_name || '');
+    const fileData = ref<File | null>(null);
 
-      allColumns: ["name", "email", "age", "country"],
-      columnOrder: ["name", "email", "age", "country"],
-      selectedColumns: [],
-      groupBy: [],
-      orderBy: "",
-      orderDirection: "asc",
-      customSQL: "",
-      transformation: "none",
+    const activePipelines = ref([
+      { id: 'pipeline_1', name: 'Daily Import' },
+      { id: 'pipeline_2', name: 'User Sync' },
+      { id: 'pipeline_3', name: 'Revenue Update' }
+    ]);
 
-      disableGroupBy: false,
-      disableOrderBy: false,
+    const allColumns = ref<string[]>([]);
+    const columnOrder = ref<string[]>([]);
+    const selectedColumns = ref<string[]>([]);
+    const groupBy = ref<string[]>([]);
+    const orderBy = ref('');
+    const orderDirection = ref('asc');
+    const customSQL = ref('');
+    const transformation = ref('none');
+    const disableGroupBy = ref(false);
+    const disableOrderBy = ref(false);
 
-      fieldMappings: {
-        name: { rename: false, newName: "", delete: false, split: false, separator: "", concat: { enabled: false, with: "", separator: " " } },
-        email: { rename: false, newName: "", delete: false, split: false, separator: "", concat: { enabled: false, with: "", separator: " " } },
-        age: { rename: false, newName: "", delete: false, split: false, separator: "", concat: { enabled: false, with: "", separator: " " } },
-        country: { rename: false, newName: "", delete: false, split: false, separator: "", concat: { enabled: false, with: "", separator: " " } }
-      },
+    const fieldMappings = ref<Record<string, any>>({});
+    const colSettingsOpen = ref<Record<string, boolean>>({});
+    const separatorOptions = ref([" ", ",", ";", "-", "/", ":", "_"]);
 
-      colSettingsOpen: {} as Record<string, boolean>,
-      separatorOptions: [" ", ",", ";", "-", "/", ":", "_"]
-    };
-  },
-  mounted() {
-    console.log("Érkezett query paraméterek:", this.$route.query);
-  },
-  methods: {
-    handleFileUpload(event: Event) {
+    onMounted(async () => {
+  if (source) {
+    try {
+      const response = await loadSchemaBySource(source);
+      const schema = response.data.field_mappings;
+
+      const cols = schema.map((f: any) => f.name);
+      allColumns.value = cols;
+      columnOrder.value = [...cols];
+      selectedColumns.value = [...cols];
+
+      const mappings: Record<string, any> = {};
+      schema.forEach((f: any) => {
+        mappings[f.name] = {
+          rename: false,
+          newName: "",
+          delete: false,
+          split: false,
+          separator: "",
+          concat: {
+            enabled: false,
+            with: "",
+            separator: " "
+          },
+          type: f.type
+        };
+      });
+
+      fieldMappings.value = mappings;
+    } catch (err) {
+      console.error("Hiba a mezők betöltésekor:", err);
+    }
+  }
+});
+
+    const handleFileUpload = (event: Event) => {
       const file = (event.target as HTMLInputElement).files?.[0] || null;
       if (file) {
-        this.uploadedFileName = file.name;
-        this.fileData = file;
+        uploadedFileName.value = file.name;
+        fileData.value = file;
       }
-    },
-    toggleSelectAll() {
-      if (this.selectedColumns.length === this.allColumns.length) {
-        this.selectedColumns = [];
+    };
+
+    const toggleSelectAll = () => {
+      if (selectedColumns.value.length === allColumns.value.length) {
+        selectedColumns.value = [];
       } else {
-        this.selectedColumns = [...this.allColumns];
+        selectedColumns.value = [...allColumns.value];
       }
-    },
-    toggleSettings(col: string) {
-      this.colSettingsOpen[col] = !this.colSettingsOpen[col];
-    },
-    submitPipelineConfig() {
-      // Ellenőrzés: fájl kötelező, ha withsource
-      if (this.conditions === 'withsource' && !this.fileData) {
+    };
+
+    const toggleSettings = (col: string) => {
+      colSettingsOpen.value[col] = !colSettingsOpen.value[col];
+    };
+
+    const submitPipelineConfig = () => {
+      if (conditions.value === 'withsource' && !fileData.value) {
         alert('Please upload a source file!');
         return;
       }
 
-      // Mentés store-ba
-      this.store.config = {
-        ...this.store.config,
-        schedule: this.schedule,
-        custom_time: this.schedule === 'custom' ? this.customTime : null,
-        condition: this.conditions,
-        dependency_pipeline_id: this.conditions === 'withdependency' ? this.dependencyPipelineId : null,
-        uploaded_file_name: this.conditions === 'withsource' ? this.uploadedFileName : null,
-
-        update_mode: this.update,
-        save_option: this.saveOption,
-
-        field_mappings: this.fieldMappings,
-        column_order: this.columnOrder,
-        selected_columns: this.selectedColumns,
-        group_by_columns: this.disableGroupBy ? [] : this.groupBy,
-        order_by_column: this.disableOrderBy ? null : this.orderBy,
-        order_direction: this.disableOrderBy ? null : this.orderDirection,
-        custom_sql: this.transformation === 'advenced' ? this.customSQL : null,
-        transformation: this.transformation
+      store.config = {
+        ...store.config,
+        schedule: schedule.value,
+        custom_time: schedule.value === 'custom' ? customTime.value : null,
+        condition: conditions.value,
+        dependency_pipeline_id: conditions.value === 'withdependency' ? dependencyPipelineId.value : null,
+        uploaded_file_name: conditions.value === 'withsource' ? uploadedFileName.value : null,
+        update_mode: update.value,
+        save_option: saveOption.value,
+        field_mappings: fieldMappings.value,
+        column_order: columnOrder.value,
+        selected_columns: selectedColumns.value,
+        group_by_columns: disableGroupBy.value ? [] : groupBy.value,
+        order_by_column: disableOrderBy.value ? null : orderBy.value,
+        order_direction: disableOrderBy.value ? null : orderDirection.value,
+        custom_sql: transformation.value === 'advenced' ? customSQL.value : null,
+        transformation: transformation.value
       };
 
-      this.router.push('/create-etl');
-    }
+      router.push('/create-etl');
+    };
+
+    return {
+      store,
+      router,
+      source,
+      schedule,
+      customTime,
+      conditions,
+      dependencyPipelineId,
+      update,
+      saveOption,
+      uploadedFileName,
+      fileData,
+      activePipelines,
+      allColumns,
+      columnOrder,
+      selectedColumns,
+      groupBy,
+      orderBy,
+      orderDirection,
+      customSQL,
+      transformation,
+      fieldMappings,
+      colSettingsOpen,
+      separatorOptions,
+      disableGroupBy,
+      disableOrderBy,
+      handleFileUpload,
+      toggleSelectAll,
+      toggleSettings,
+      submitPipelineConfig
+    };
   }
 });
 </script>
 
-<style scoped src="./ETLConfig.style.css"></style>
+
+<style scoped src="./Styles/ETLConfig.style.css"></style>

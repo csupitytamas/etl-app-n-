@@ -33,4 +33,5 @@ class ETLConfig(Base):
     version = Column(Integer, default=1)
     created_at = Column(DateTime, default=datetime.utcnow)
     modified_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    target_table_name = Column(String, nullable=True)
 

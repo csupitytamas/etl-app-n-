@@ -8,7 +8,6 @@ app.use(router)
 app.mount('#app')
 app.use(createPinia())
 
-// 💡 Menüből érkező navigációs esemény
 window.electron?.ipcRenderer?.on("navigate", (_, route) => {
     router.push(route);
 });
