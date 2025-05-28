@@ -37,7 +37,7 @@
       </select>
     </div>
 
-    <div class="form-group" v-if="conditions === 'withfile'">
+    <div class="form-group" v-if="conditions === 'withsource'">
       <label>Own Source feltöltés:</label>
       <div class="custom-file-input">
         <label for="fileUpload" class="upload-label">
@@ -47,51 +47,52 @@
       </div>
     </div>
 
-    <!-- Field Mapping (Drag & Drop) -->
-<div class="form-group">
-  <label>Field Mapping</label>
-  <draggable v-model="columnOrder" item-key="col" class="draggable-list">
-  <template #item="{ element: col,index  }">
-    <div class="mapping-row">
-        <div class="mapping-header">
-          <span class="drag-handle">☰</span>
-          <span class="column-index">{{ index + 1 }}.</span>
-          <span class="column-name">{{ col }}</span>
-          <button class="settings-button" @click="toggleSettings(col)">⚙️</button>
-      </div>
+    <!-- Field Mapping  -->
+  <div class="form-group">
+    <label>Field Mapping</label>
+    <draggable v-model="columnOrder" item-key="col" class="draggable-list">
+      <template #item="{ element: col, index }">
+        <div class="mapping-row">
+          <div class="mapping-header">
+            <span class="drag-handle">☰</span>
+            <span class="column-index">{{ index + 1 }}.</span>
+            <span class="column-name">{{ col }}</span>
+            <button class="settings-button" @click="toggleSettings(col)">⚙️</button>
+          </div>
 
-        <div v-if="colSettingsOpen[col]" class="mapping-settings">
-          <label><input type="checkbox" v-model="fieldMappings[col].rename" /> Rename</label>
-          <input v-if="fieldMappings[col].rename" type="text" v-model="fieldMappings[col].newName" placeholder="New name" />
+          <div v-if="colSettingsOpen[col]" class="mapping-settings">
+            <label><input type="checkbox" v-model="fieldMappings[col].rename" /> Rename</label>
+            <input v-if="fieldMappings[col].rename" type="text" v-model="fieldMappings[col].newName" placeholder="New name" />
 
-          <label><input type="checkbox" v-model="fieldMappings[col].delete" /> Delete</label>
+            <label><input type="checkbox" v-model="fieldMappings[col].delete" /> Delete</label>
 
-          <label><input type="checkbox" v-model="fieldMappings[col].split" /> Split</label>
-          <input v-if="fieldMappings[col].split" type="text" v-model="fieldMappings[col].separator" placeholder="Separator (,)" />
-
-          <label><input type="checkbox" v-model="fieldMappings[col].join" /> Join</label>
-          <div v-if="fieldMappings[col].join" class="join-options">
-            <label>Join with column:</label>
-            <select v-model="fieldMappings[col].joinColumn">
+             <label><input type="checkbox" v-model="fieldMappings[col].split" /> Split</label>
+            <select v-if="fieldMappings[col].split" v-model="fieldMappings[col].separator">
               <option disabled value="">Please select</option>
-              <option v-for="targetCol in allColumns" :key="targetCol" :value="targetCol">
-                {{ targetCol }}
-              </option>
+              <option v-for="sep in separatorOptions" :key="sep" :value="sep">{{ sep === ' ' ? 'space' : sep }}</option>
             </select>
 
-            <label>Join type:</label>
-            <select v-model="fieldMappings[col].joinType">
-              <option value="inner">Inner Join</option>
-              <option value="left">Left Join</option>
-              <option value="right">Right Join</option>
-              <option value="full">Full Outer Join</option>
-            </select>
+            <label><input type="checkbox" v-model="fieldMappings[col].concat.enabled" /> Concatenate</label>
+            <div v-if="fieldMappings[col].concat.enabled" class="join-options">
+              <label>With column:</label>
+              <select v-model="fieldMappings[col].concat.with">
+                <option disabled value="">Please select</option>
+                <option v-for="targetCol in allColumns" :key="targetCol" :value="targetCol">
+                  {{ targetCol }}
+                </option>
+              </select>
+
+              <label>Separator:</label>
+              <select v-model="fieldMappings[col].concat.separator">
+                <option disabled value="">Please select</option>
+                <option v-for="sep in separatorOptions" :key="sep" :value="sep">{{ sep === ' ' ? 'space' : sep }}</option>
+              </select>
+            </div>
           </div>
         </div>
-      </div>
-  </template>
-</draggable>
-</div>
+      </template>
+    </draggable>
+  </div>
 
     <!-- Transformation -->
     <div class="form-group">
@@ -187,332 +188,168 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
 import draggable from 'vuedraggable';
+import { defineComponent, onMounted, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { usePipelineStore } from '@/stores/pipelineStore';
+import { loadSchemaBySource } from '@/api/pipeline';
+import axios from 'axios';
 
-export default {
-  name: "ETLConfig",
+export default defineComponent({
+  name: 'ETLConfig',
   components: { draggable },
-  data() {
-    return {
-      schedule: "daily",
-      customTime: "",
-      transformation: "none",
-      update: "append",
-      conditions: "none",
-      dependencyPipelineId: "",
-      activePipelines: [
-        { id: "pipeline_1", name: "Daily Import" },
-        { id: "pipeline_2", name: "User Sync" },
-        { id: "pipeline_3", name: "Revenue Update" },
-      ],
-      saveOption: "todatabase",
-      uploadedFileName: "",
+  setup() {
+    const store = usePipelineStore();
+    const router = useRouter();
+    const route = useRoute();
 
-      allColumns: ["name", "email", "age", "country"],
-      columnOrder: ["name", "email", "age", "country"],
-      selectedColumns: [],
-      groupBy: [],
-      orderBy: "",
-      orderDirection: "asc",
-      customSQL: "",
+    const source = route.query.selectedSource as string;
+    const schedule = ref(store.config.schedule || 'daily');
+    const customTime = ref(store.config.custom_time || '');
+    const conditions = ref(store.config.condition || 'none');
+    const dependencyPipelineId = ref(store.config.dependency_pipeline_id || '');
+    const update = ref(store.config.update_mode || 'append');
+    const saveOption = ref(store.config.save_option || 'todatabase');
+    const uploadedFileName = ref(store.config.uploaded_file_name || '');
+    const fileData = ref<File | null>(null);
 
-      disableGroupBy: false,
-      disableOrderBy: false,
+    const activePipelines = ref([
+      { id: 'pipeline_1', name: 'Daily Import' },
+      { id: 'pipeline_2', name: 'User Sync' },
+      { id: 'pipeline_3', name: 'Revenue Update' }
+    ]);
 
-        fieldMappings: {
-        name: { rename: false, newName: "", delete: false, split: false, separator: "", join: false, joinColumn: "", joinType: "inner" },
-        email: { rename: false, newName: "", delete: false, split: false, separator: "", join: false, joinColumn: "", joinType: "inner" },
-        age: { rename: false, newName: "", delete: false, split: false, separator: "", join: false, joinColumn: "", joinType: "inner" },
-        country: { rename: false, newName: "", delete: false, split: false, separator: "", join: false, joinColumn: "", joinType: "inner" }
-      },
-      colSettingsOpen: {},
-    };
-  },
-  methods: {
-    handleFileUpload(event) {
-      const file = event.target.files[0];
-      this.uploadedFileName = file ? file.name : "";
-    },
-    toggleSelectAll() {
-      if (this.selectedColumns.length === this.allColumns.length) {
-        this.selectedColumns = [];
-      } else {
-        this.selectedColumns = [...this.allColumns];
-      }
-    },
-      toggleSettings(col) {
-      this.colSettingsOpen[col] = !this.colSettingsOpen[col];
-    },
-    submitPipelineConfig() {
-      const payload = {
-        schedule: this.schedule,
-        custom_time: this.schedule === "custom" ? this.customTime : null,
-        transformation: this.transformation,
-        columns: {
-          select: this.selectedColumns,
-          groupby: this.disableGroupBy ? [] : this.groupBy,
-          orderby: this.disableOrderBy
-            ? null
-            : {
-                column: this.orderBy,
-                direction: this.orderBy ? this.orderDirection : null
-              }
-        },
-        custom_sql: this.transformation === "advenced" ? this.customSQL : null,
-        update_mode: this.update,
-        save_option: this.saveOption,
-        conditions: this.conditions,
-        dependency_pipeline_id: this.conditions === "withdependency" ? this.dependencyPipelineId : null,
-        uploaded_file_name: this.conditions === "withfile" ? this.uploadedFileName : null
-      };
+    const allColumns = ref<string[]>([]);
+    const columnOrder = ref<string[]>([]);
+    const selectedColumns = ref<string[]>([]);
+    const groupBy = ref<string[]>([]);
+    const orderBy = ref('');
+    const orderDirection = ref('asc');
+    const customSQL = ref('');
+    const transformation = ref('none');
+    const disableGroupBy = ref(false);
+    const disableOrderBy = ref(false);
 
-      console.log("Küldendő payload:", payload);
-      alert("Pipeline config saved!");
-      window.history.back();
+    const fieldMappings = ref<Record<string, any>>({});
+    const colSettingsOpen = ref<Record<string, boolean>>({});
+    const separatorOptions = ref([" ", ",", ";", "-", "/", ":", "_"]);
+
+    onMounted(async () => {
+  if (source) {
+    try {
+      const response = await loadSchemaBySource(source);
+      const schema = response.data.field_mappings;
+
+      const cols = schema.map((f: any) => f.name);
+      allColumns.value = cols;
+      columnOrder.value = [...cols];
+      selectedColumns.value = [...cols];
+
+      const mappings: Record<string, any> = {};
+      schema.forEach((f: any) => {
+        mappings[f.name] = {
+          rename: false,
+          newName: "",
+          delete: false,
+          split: false,
+          separator: "",
+          concat: {
+            enabled: false,
+            with: "",
+            separator: " "
+          },
+          type: f.type
+        };
+      });
+
+      fieldMappings.value = mappings;
+    } catch (err) {
+      console.error("Hiba a mezők betöltésekor:", err);
     }
   }
-};
+});
+
+    const handleFileUpload = (event: Event) => {
+      const file = (event.target as HTMLInputElement).files?.[0] || null;
+      if (file) {
+        uploadedFileName.value = file.name;
+        fileData.value = file;
+      }
+    };
+
+    const toggleSelectAll = () => {
+      if (selectedColumns.value.length === allColumns.value.length) {
+        selectedColumns.value = [];
+      } else {
+        selectedColumns.value = [...allColumns.value];
+      }
+    };
+
+    const toggleSettings = (col: string) => {
+      colSettingsOpen.value[col] = !colSettingsOpen.value[col];
+    };
+
+    const submitPipelineConfig = () => {
+      if (conditions.value === 'withsource' && !fileData.value) {
+        alert('Please upload a source file!');
+        return;
+      }
+
+      store.config = {
+        ...store.config,
+        schedule: schedule.value,
+        custom_time: schedule.value === 'custom' ? customTime.value : null,
+        condition: conditions.value,
+        dependency_pipeline_id: conditions.value === 'withdependency' ? dependencyPipelineId.value : null,
+        uploaded_file_name: conditions.value === 'withsource' ? uploadedFileName.value : null,
+        update_mode: update.value,
+        save_option: saveOption.value,
+        field_mappings: fieldMappings.value,
+        column_order: columnOrder.value,
+        selected_columns: selectedColumns.value,
+        group_by_columns: disableGroupBy.value ? [] : groupBy.value,
+        order_by_column: disableOrderBy.value ? null : orderBy.value,
+        order_direction: disableOrderBy.value ? null : orderDirection.value,
+        custom_sql: transformation.value === 'advenced' ? customSQL.value : null,
+        transformation: transformation.value
+      };
+
+      router.push('/create-etl');
+    };
+
+    return {
+      store,
+      router,
+      source,
+      schedule,
+      customTime,
+      conditions,
+      dependencyPipelineId,
+      update,
+      saveOption,
+      uploadedFileName,
+      fileData,
+      activePipelines,
+      allColumns,
+      columnOrder,
+      selectedColumns,
+      groupBy,
+      orderBy,
+      orderDirection,
+      customSQL,
+      transformation,
+      fieldMappings,
+      colSettingsOpen,
+      separatorOptions,
+      disableGroupBy,
+      disableOrderBy,
+      handleFileUpload,
+      toggleSelectAll,
+      toggleSettings,
+      submitPipelineConfig
+    };
+  }
+});
 </script>
-
-<style scoped>
-.config-container {
-  max-width: 50%;
-  margin: 40px auto;
-  padding: 40px;
-  background-color: #f5f7fa;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-  font-family: "Segoe UI", sans-serif;
-}
-
-h2 {
-  text-align: center;
-  font-size: 24px;
-  margin-bottom: 32px;
-  color: #333;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  margin-bottom: 24px;
-}
-
-label {
-  font-weight: 600;
-  margin-bottom: 8px;
-}
-.custom-time-wrapper {
-  width: 100%;
-  display: flex;
-  justify-content: center; /* Ez hozza középre az inputot */
-  margin-top: 10px;
-}
-
-.custom-time-wrapper input[type="time"] {
-  width: 50%; /* vagy 60%, ha keskenyebb kell */
-  padding: 8px 12px;
-  font-size: 14px;
-  border: 1px solid #aaa;
-  border-radius: 5px;
-  background-color: white;
-  box-sizing: border-box;
-  text-align: center; /* az érték is középen jelenik meg */
-}
-
-input[type="text"],
-input[type="time"],
-input[type="file"],
-textarea,
-select {
-  padding: 10px;
-  border-radius: 6px;
-  border: 1px solid #bbb;
-  font-size: 14px;
-  min-width: 200px;
-  text-align: center;
-}
-
-textarea {
-  resize: vertical;
-  min-height: 80px;
-}
-
-button {
-  background-color: #007bff;
-  color: white;
-  padding: 12px 20px;
-  font-size: 15px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  margin-top: 10px;
-}
-
-button:hover {
-  background-color: #0056b3;
-}
-
-.small-button {
-  padding: 6px 14px;
-  font-size: 13px;
-  align-self: flex-start;
-  margin-bottom: 8px;
-}
-
-.custom-file-input {
-  position: relative;
-  width: 100%;
-}
-
-.upload-label {
-  display: block;
-  width: 100%;
-  padding: 12px;
-  border: 1px dashed #007bff;
-  border-radius: 6px;
-  background-color: #e9f1ff;
-  color: #007bff;
-  text-align: center;
-  cursor: pointer;
-  font-size: 14px;
-}
-
-.custom-file-input input[type="file"] {
-  position: absolute;
-  left: 0;
-  top: 0;
-  opacity: 0;
-  height: 100%;
-  width: 100%;
-  cursor: pointer;
-}
-
-.none-option {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 6px;
-}
-
-.grid-checkboxes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid #ccc;
-  border-radius: 8px;
-  background-color: #f9f9f9;
-  margin-top: 10px;
-}
-.grid-checkboxes label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.order-direction-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 20px;
-  margin-top: 10px;
-}
-.standard-select {
-  width: 100%;
-  padding: 8px 10px;
-  font-size: 14px;
-  border: 1px solid #aaa;
-  border-radius: 5px;
-  background-color: white;
-  text-align: center;
-}
-
-/* Drag & Drop */
-
-.draggable-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  justify-content: flex-start;
-}
-
-.mapping-row {
-  width: clamp(200px, 18%, 250px);
-  background: #ffffff;
-  border: 1px dashed #bbb;
-  border-radius: 8px;
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
-}
-
-.mapping-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  margin-bottom: 6px;
-}
-
-.column-index {
-  font-weight: bold;
-  font-size: 14px;
-  color: #888;
-}
-
-.mapping-settings {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 8px;
-  background: #f5f7fa;
-  border-radius: 6px;
-  box-sizing: border-box;
-  overflow-wrap: break-word;
-}
-
-.mapping-settings input[type="text"],
-.mapping-settings select {
-  width: 100%;
-  max-width: 190px;
-  padding: 6px 8px;
-  font-size: 14px;
-  border: 1px solid #ccc;
-  border-radius: 5px;
-  box-sizing: border-box;
-}
-
-.join-options {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.join-options label {
-  font-weight: 500;
-}
-
-.join-options select {
-  text-align: center;
-  min-width: 100px;
-  max-width: 180px;
-  align-self: flex-start;
-}
-
-.settings-button {
-  background: none;
-  border: none;
-  font-size: 1.2rem;
-  cursor: pointer;
-  color: #666;
-}
-
-.drag-handle {
-  cursor: grab;
-}
-</style>
+<style scoped src="./styles/ETLConfig.style.css"></style>
