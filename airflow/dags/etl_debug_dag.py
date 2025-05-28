@@ -6,7 +6,6 @@ import logging
 
 
 def print_etlconfigs():
-
     engine = sa.create_engine("postgresql+psycopg2://postgres:admin123@host.docker.internal:5433/ETL")
     
     with engine.connect() as conn:
