@@ -25,7 +25,7 @@ http://localhost:8080/home
 
 A SIMPLE DAG:
 
-# 1. import
-# 2. functions
-# 3. DAG init
-# 4. tasks init
+1. import
+2. functions 
+3. DAG init
+4. tasks init
