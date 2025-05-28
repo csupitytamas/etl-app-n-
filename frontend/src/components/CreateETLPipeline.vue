@@ -59,9 +59,13 @@ export default {
       }
     }
   },
+
+
   mounted() {
   this.fetchSources();
 },
+
+
   methods: {
     async fetchSources() {
     try {
@@ -71,6 +75,8 @@ export default {
       console.error("Cant load the sources:", err);
     }
   },
+
+
     submitPipeline() {
     const payload = {
    pipeline_name: this.pipelineName,
@@ -100,4 +106,4 @@ export default {
   }
 };
 </script>
-<style scoped src="./Styles/CreateETLPipeline.style.css"></style>
+<style scoped src="./styles/CreateETLPipeline.style.css"></style>

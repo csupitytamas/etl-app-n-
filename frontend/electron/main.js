@@ -26,7 +26,6 @@ async function waitForViteServer(retries = 20) {
         checkServer();
     });
 }
-// 🖼 **Főablak létrehozása**
 async function createWindow() {
     mainWindow = new BrowserWindow({
         width: 800,
@@ -38,10 +37,10 @@ async function createWindow() {
         }
     });
 
-    await waitForViteServer(); // 💡 Megvárjuk a Vite szervert
+    await waitForViteServer();
     mainWindow.loadURL(VITE_DEV_SERVER_URL);
 
-    createMenu(mainWindow); // 📌 Menü inicializálása az ablakhoz
+    createMenu(mainWindow);
 
     mainWindow.on('closed', () => {
         mainWindow = null;
@@ -49,8 +48,7 @@ async function createWindow() {
 }
 
 app.whenReady().then(() => {
-    console.log("🚀 Electron ready!");
-    createWindow();
+   createWindow();
 });
 
 

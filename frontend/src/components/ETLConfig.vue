@@ -47,7 +47,7 @@
       </div>
     </div>
 
-    <!-- Field Mapping (Drag & Drop) -->
+    <!-- Field Mapping  -->
   <div class="form-group">
     <label>Field Mapping</label>
     <draggable v-model="columnOrder" item-key="col" class="draggable-list">
@@ -352,6 +352,4 @@ export default defineComponent({
   }
 });
 </script>
-
-
-<style scoped src="./Styles/ETLConfig.style.css"></style>
+<style scoped src="./styles/ETLConfig.style.css"></style>

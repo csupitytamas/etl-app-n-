@@ -4,15 +4,13 @@ import re
 import uuid
 
 def sanitize_name(name: str) -> str:
-    """Távolítson el minden nem alfanumerikus vagy aláhúzás karaktert, és kisbetűsre vált."""
     name = name.lower()
     name = re.sub(r'[^a-z0-9_]', '_', name)
     return name[:40]
 
 def generate_table_name(pipeline_name: str, version: int, uid: str | None = None) -> str:
-    """Létrehoz egy egyedi, verziózott tábla nevet."""
     pipeline_name = sanitize_name(pipeline_name)
-    uid = uid or str(uuid.uuid4())[:8]  # rövidített UUID
+    uid = uid or str(uuid.uuid4())[:8]
     return f"{pipeline_name}_v{version}_{uid}"
 
 def create_table_from_schema(table_name: str, field_mappings: list[dict], db: Session):
