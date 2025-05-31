@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from src.schemas import  ETLConfigBase, ETLConfigUpdate, ETLConfigResponse
 from src.db.connection import get_db
 from src.models import ETLConfig, APISchema
-from src.utils.db_creation_util import generate_table_name, create_table_from_schema
+from src.utils.db_creation_util import generate_table_name
 from src.constans.accepted_fields import ACCEPTED_ETL_FIELDS
 
 
@@ -16,7 +16,6 @@ def create_pipeline(config:  ETLConfigBase, db: Session = Depends(get_db)):
         if not schema:
             raise HTTPException(status_code=404, detail="No schema found for the selected source.")
         table_name = generate_table_name(config.pipeline_name, version=1)
-        create_table_from_schema(table_name, schema.field_mappings, db)
         filtered_data = {k: v for k, v in config.dict().items() if k in ACCEPTED_ETL_FIELDS}
         filtered_data["target_table_name"] = table_name
         new_pipeline = ETLConfig(**filtered_data, version=1)
@@ -24,7 +23,7 @@ def create_pipeline(config:  ETLConfigBase, db: Session = Depends(get_db)):
         db.add(new_pipeline)
         db.commit()
         db.refresh(new_pipeline)
-        print("Pipilne successfully created:", new_pipeline.pipeline_name)
+        print("Pipeline successfully created:", new_pipeline.pipeline_name)
 
         return new_pipeline
 
