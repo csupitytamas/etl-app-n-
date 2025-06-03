@@ -9,7 +9,7 @@ export const getAllPipelines = () =>
   api.get(`${prefix}/all`);
 
 export const updatePipeline = (id, payload) =>
-  api.put(`${prefix}/update/${id}`, payload);
+  api.post(`${prefix}/updated_pipeline/${id}`, payload);
 
 export const loadSchemaBySource = (source) =>
   api.post(`${prefix}/load-schema`, { source });

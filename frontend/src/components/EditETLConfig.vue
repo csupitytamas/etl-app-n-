@@ -189,38 +189,34 @@
   </div>
 </template>
 
+
 <script lang="ts">
 import draggable from 'vuedraggable';
 import { defineComponent, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { usePipelineStore } from '@/stores/pipelineStore';
-import { loadSchemaBySource } from '@/api/pipeline';
-import axios from 'axios';
+import { loadPipelineData, updatePipeline } from '@/api/pipeline';
 
 export default defineComponent({
-  name: 'ETLConfig',
+  name: 'EditorETLConfig',
   components: { draggable },
   setup() {
     const store = usePipelineStore();
     const router = useRouter();
     const route = useRoute();
 
-    const source = route.query.selectedSource as string;
-    const schedule = ref(store.config.schedule || 'daily');
-    const customTime = ref(store.config.custom_time || '');
-    const conditions = ref(store.config.condition || 'none');
-    const dependencyPipelineId = ref(store.config.dependency_pipeline_id || '');
-    const update = ref(store.config.update_mode || 'append');
-    const saveOption = ref(store.config.save_option || 'todatabase');
-    const uploadedFileName = ref(store.config.uploaded_file_name || '');
+    const pipelineId = route.query.id;
+
+    const schedule = ref('daily');
+    const customTime = ref('');
+    const conditions = ref('none');
+    const dependencyPipelineId = ref('');
+    const update = ref('append');
+    const saveOption = ref('todatabase');
+    const uploadedFileName = ref('');
     const fileData = ref<File | null>(null);
 
-    const activePipelines = ref([
-      { id: 'pipeline_1', name: 'Daily Import' },
-      { id: 'pipeline_2', name: 'User Sync' },
-      { id: 'pipeline_3', name: 'Revenue Update' }
-    ]);
-
+    const activePipelines = ref([]);
     const allColumns = ref<string[]>([]);
     const columnOrder = ref<string[]>([]);
     const selectedColumns = ref<string[]>([]);
@@ -237,39 +233,40 @@ export default defineComponent({
     const separatorOptions = ref([" ", ",", ";", "-", "/", ":", "_"]);
 
     onMounted(async () => {
-  if (source) {
-    try {
-      const response = await loadSchemaBySource(source);
-      const schema = response.data.field_mappings;
+      if (pipelineId) {
+        try {
+          const response = await loadPipelineData(pipelineId);
+          const pipeline = response.data;
 
-      const cols = schema.map((f: any) => f.name);
-      allColumns.value = cols;
-      columnOrder.value = [...cols];
-      selectedColumns.value = [...cols];
+          store.config = { ...pipeline };
 
-      const mappings: Record<string, any> = {};
-      schema.forEach((f: any) => {
-        mappings[f.name] = {
-          rename: false,
-          newName: "",
-          delete: false,
-          split: false,
-          separator: "",
-          concat: {
-            enabled: false,
-            with: "",
-            separator: " "
-          },
-          type: f.type
-        };
-      });
+          schedule.value = pipeline.schedule || 'daily';
+          customTime.value = pipeline.custom_time || '';
+          conditions.value = pipeline.condition || 'none';
+          dependencyPipelineId.value = pipeline.dependency_pipeline_id || '';
+          update.value = pipeline.update_mode || 'append';
+          saveOption.value = pipeline.save_option || 'todatabase';
+          uploadedFileName.value = pipeline.uploaded_file_name || '';
 
-      fieldMappings.value = mappings;
-    } catch (err) {
-      console.error("Cant load the fields", err);
-    }
-  }
-});
+          columnOrder.value = pipeline.column_order || [];
+          selectedColumns.value = pipeline.selected_columns || [];
+          groupBy.value = pipeline.group_by_columns || [];
+          orderBy.value = pipeline.order_by_column || '';
+          orderDirection.value = pipeline.order_direction || 'asc';
+          customSQL.value = pipeline.custom_sql || '';
+
+          if (pipeline.transformation) {
+            transformation.value = pipeline.transformation.type;
+          }
+
+          fieldMappings.value = pipeline.field_mappings || {};
+          allColumns.value = Object.keys(fieldMappings.value);
+
+        } catch (err) {
+          console.error("Failed to load:", err);
+        }
+      }
+    });
 
     const handleFileUpload = (event: Event) => {
       const file = (event.target as HTMLInputElement).files?.[0] || null;
@@ -291,39 +288,46 @@ export default defineComponent({
       colSettingsOpen.value[col] = !colSettingsOpen.value[col];
     };
 
-    const submitPipelineConfig = () => {
-      if (conditions.value === 'withsource' && !fileData.value) {
-        alert('Please upload a source file!');
+    const submitPipelineConfig = async () => {
+      if (!pipelineId) {
+        alert('Missing pipeline ID for update.');
         return;
       }
 
-      store.config = {
-        ...store.config,
-        schedule: schedule.value,
-        custom_time: schedule.value === 'custom' ? customTime.value : null,
-        condition: conditions.value,
-        dependency_pipeline_id: conditions.value === 'withdependency' ? dependencyPipelineId.value : null,
-        uploaded_file_name: conditions.value === 'withsource' ? uploadedFileName.value : null,
-        update_mode: update.value,
-        save_option: saveOption.value,
-        field_mappings: fieldMappings.value,
-        column_order: columnOrder.value,
-        selected_columns: selectedColumns.value,
-        group_by_columns: disableGroupBy.value ? [] : groupBy.value,
-        order_by_column: disableOrderBy.value ? null : orderBy.value,
-        order_direction: disableOrderBy.value ? null : orderDirection.value,
-        custom_sql: transformation.value === 'advenced' ? customSQL.value : null,
-        transformation: {
-          type: transformation.value }
-      };
+      try {
+        const payload = {
+          schedule: schedule.value,
+          custom_time: schedule.value === 'custom' ? customTime.value : null,
+          condition: conditions.value,
+          dependency_pipeline_id: conditions.value === 'withdependency' ? dependencyPipelineId.value : null,
+          uploaded_file_name: conditions.value === 'withsource' ? uploadedFileName.value : null,
+          update_mode: update.value,
+          save_option: saveOption.value,
+          field_mappings: fieldMappings.value,
+          column_order: columnOrder.value,
+          selected_columns: selectedColumns.value,
+          group_by_columns: disableGroupBy.value ? [] : groupBy.value,
+          order_by_column: disableOrderBy.value ? null : orderBy.value,
+          order_direction: disableOrderBy.value ? null : orderDirection.value,
+          custom_sql: transformation.value === 'advenced' ? customSQL.value : null,
+          transformation: { type: transformation.value }
+        };
 
-      router.push('/create-etl');
+        console.log("Update payload:", payload);
+
+        await updatePipeline(pipelineId, payload);
+
+        alert('Pipeline updated successfully!');
+        router.push('/'); // Visszairányít pl. a Dashboard-ra
+      } catch (err) {
+        console.error("Error updating pipeline:", err);
+        alert('Failed to update pipeline!');
+      }
     };
 
     return {
       store,
       router,
-      source,
       schedule,
       customTime,
       conditions,

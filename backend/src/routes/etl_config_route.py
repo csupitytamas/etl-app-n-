@@ -32,19 +32,42 @@ def create_pipeline(config:  ETLConfigBase, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/all", response_model=list[ETLConfigResponse])
+def get_all_pipelines(db: Session = Depends(get_db)):
+    pipelines = db.query(ETLConfig).all()
+    return pipelines
 
-@router.put("/update/{pipeline_id}", response_model=ETLConfigResponse)
-def update_pipeline(pipeline_id: int, config: ETLConfigUpdate, db: Session = Depends(get_db)):
+@router.post("/load/{pipeline_id}", response_model=ETLConfigResponse)
+def load_pipeline_data(pipeline_id: int, db: Session = Depends(get_db)):
     pipeline = db.query(ETLConfig).filter(ETLConfig.id == pipeline_id).first()
 
     if not pipeline:
         raise HTTPException(status_code=404, detail="Pipeline not found")
 
-    for key, value in config.dict(exclude_unset=True).items():
-        setattr(pipeline, key, value)
-
-    pipeline.version += 1
-    db.commit()
-    db.refresh(pipeline)
     return pipeline
 
+
+@router.post("/updated_pipeline/{pipeline_id}", response_model=ETLConfigResponse)
+def updated_pipeline(pipeline_id: int, config: ETLConfigUpdate, db: Session = Depends(get_db)):
+    old_pipeline = db.query(ETLConfig).filter(ETLConfig.id == pipeline_id).first()
+
+    if not old_pipeline:
+        raise HTTPException(status_code=404, detail="Pipeline not found")
+
+    updated_data = config.dict(exclude_unset=True)
+    updated_data['source'] = old_pipeline.source
+    new_version = old_pipeline.version + 1
+    new_pipeline_name = f"{old_pipeline.pipeline_name} v{new_version}"
+    new_table_name = generate_table_name(new_pipeline_name, new_version)
+
+    new_pipeline = ETLConfig(
+        **updated_data,
+        pipeline_name=new_pipeline_name,     # EZ az új név kell!
+        version=new_version,
+        target_table_name=new_table_name
+    )
+
+    db.add(new_pipeline)
+    db.commit()
+    db.refresh(new_pipeline)
+    return new_pipeline

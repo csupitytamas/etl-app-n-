@@ -1,22 +1,22 @@
 import { defineStore } from 'pinia'
 
 export interface ConfigData {
-  schedule: string
-  custom_time?: string | null
-  condition?: string | null
-  dependency_pipeline_id?: string | null
-  uploaded_file_path?: string | null
-  uploaded_file_name?: string | null
-  field_mappings?: Record<string, any>
-  transformation?: string
-  selected_columns?: string[]
-  group_by_columns?: string[]
-  order_by_column?: string | null
-  order_direction?: string | null
-  custom_sql?: string | null
-  column_order?: string[]
-  update_mode: string
-  save_option: string
+  schedule: string;
+  custom_time?: string | null;
+  condition?: string | null;
+  dependency_pipeline_id?: string | null;
+  uploaded_file_path?: string | null;
+  uploaded_file_name?: string | null;
+  field_mappings?: Record<string, any>;
+  transformation?: Record<string, any>;
+  selected_columns?: string[];
+  group_by_columns?: string[];
+  order_by_column?: string | null;
+  order_direction?: string | null;
+  custom_sql?: string | null;
+  column_order?: string[];
+  update_mode: string;
+  save_option: string;
 }
 
 export const usePipelineStore = defineStore('pipeline', {

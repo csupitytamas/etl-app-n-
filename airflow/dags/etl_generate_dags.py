@@ -128,7 +128,7 @@ with engine.connect() as conn:
     pipelines = conn.execute(query).mappings().all()
 
 for pipeline in pipelines:
-    dag_id = f"etl_pipeline_{pipeline['id']}"
+    dag_id = f"{pipeline['pipeline_name'].replace(' ', '_').lower()}_{pipeline['id']}"
     schedule = pipeline['schedule']
     custom_time = pipeline.get('custom_time')
 

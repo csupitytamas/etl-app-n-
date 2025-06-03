@@ -77,22 +77,23 @@ export default {
   },
 
 
-    submitPipeline() {
-    const payload = {
-   pipeline_name: this.pipelineName,
+submitPipeline() {
+  const payload = {
+    pipeline_name: this.pipelineName,
     source: this.selectedSource,
-   ...JSON.parse(JSON.stringify(this.store.config))
-      };
-    console.log("Final payload:", payload)
-      createPipeline(payload)
-        .then(response => {
-          alert('Successfully created!');
-          this.$router.push('/');
-        })
-        .catch(error => {
-          alert('Error!');
-        });
-    },
+    ...this.store.config
+  };
+  console.log("Final payload:", payload);
+  createPipeline(payload)
+    .then(response => {
+      alert('Successfully created!');
+      this.$router.push('/');
+    })
+    .catch(error => {
+      alert('Error!');
+    });
+},
+
 
     openConfiguration() {
       this.$router.push({
