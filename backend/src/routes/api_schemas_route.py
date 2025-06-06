@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from src.db.connection import get_db
 from src.models import APISchema
-from src.schemas.api_schemas_schema import SourceRequest
+from src.schemas.api_schemas_schema import  SourceAlias,  SourceRequest
 import json
 from src.services.etl_loader import load_to_target_table
 
@@ -21,10 +21,10 @@ def run_pipeline_load(pipeline_id: int, db: Session = Depends(get_db)):
 
 
 
-@router.get("/available-sources", response_model=List[str])
+@router.get("/available-sources", response_model=List[SourceAlias])
 def get_available_sources(db: Session = Depends(get_db)):
-    sources = db.query(APISchema.source).all()
-    return [row[0] for row in sources]
+    sources = db.query(APISchema.source, APISchema.alias, APISchema.description).all()
+    return [{"source": row[0], "alias": row[1], "description": row[2]} for row in sources]
 
 
 

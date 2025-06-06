@@ -12,8 +12,13 @@
         <label for="source">Select Source:</label>
         <select v-model="selectedSource" id="source">
           <option disabled value="">Please select</option>
-          <option v-for="source in sources" :key="source" :value="source">
-            {{ source }}
+          <option
+            v-for="item in sources"
+            :key="item.source"
+            :value="item.source"
+            :title="item.description || ''"
+          >
+            {{ item.alias || item.source }}
           </option>
         </select>
       </div>
@@ -68,13 +73,14 @@ export default {
 
   methods: {
     async fetchSources() {
-    try {
-      const response = await getAvailableSources();
-      this.sources = response.data;
-    } catch (err) {
-      console.error("Cant load the sources:", err);
-    }
-  },
+  try {
+    const response = await getAvailableSources();
+    console.log("Sources fetched:", response.data); // <--- EZ FONTOS
+    this.sources = response.data;
+  } catch (err) {
+    console.error("Can't load the sources:", err);
+  }
+},
 
 
 submitPipeline() {

@@ -3,21 +3,26 @@ from sqlalchemy.orm import Session
 from src.schemas import  ETLConfigBase, ETLConfigUpdate, ETLConfigResponse
 from src.db.connection import get_db
 from src.models import ETLConfig, APISchema
-from src.utils.db_creation_util import generate_table_name
+from src.utils.db_creation_util import generate_table_name, generate_dag_id
 from src.constans.accepted_fields import ACCEPTED_ETL_FIELDS
 
 
 router = APIRouter()
 
+
 @router.post("/create", response_model=ETLConfigResponse)
-def create_pipeline(config:  ETLConfigBase, db: Session = Depends(get_db)):
+def create_pipeline(config: ETLConfigBase, db: Session = Depends(get_db)):
     try:
         schema = db.query(APISchema).filter_by(source=config.source).first()
         if not schema:
             raise HTTPException(status_code=404, detail="No schema found for the selected source.")
         table_name = generate_table_name(config.pipeline_name, version=1)
+
+        dag_id = generate_dag_id(config.pipeline_name, version=1)
+
         filtered_data = {k: v for k, v in config.dict().items() if k in ACCEPTED_ETL_FIELDS}
         filtered_data["target_table_name"] = table_name
+        filtered_data["dag_id"] = dag_id  # << EZ a lényeg!
         new_pipeline = ETLConfig(**filtered_data, version=1)
 
         db.add(new_pipeline)
@@ -30,7 +35,6 @@ def create_pipeline(config:  ETLConfigBase, db: Session = Depends(get_db)):
     except Exception as e:
         print("Error:", e)
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.get("/all", response_model=list[ETLConfigResponse])
 def get_all_pipelines(db: Session = Depends(get_db)):
@@ -59,12 +63,14 @@ def updated_pipeline(pipeline_id: int, config: ETLConfigUpdate, db: Session = De
     new_version = old_pipeline.version + 1
     new_pipeline_name = f"{old_pipeline.pipeline_name} v{new_version}"
     new_table_name = generate_table_name(new_pipeline_name, new_version)
+    dag_id = generate_dag_id(new_pipeline_name, new_version)  # << ÚJ dag_id a verzióhoz
 
     new_pipeline = ETLConfig(
         **updated_data,
-        pipeline_name=new_pipeline_name,     # EZ az új név kell!
+        pipeline_name=new_pipeline_name,
         version=new_version,
-        target_table_name=new_table_name
+        target_table_name=new_table_name,
+        dag_id=dag_id
     )
 
     db.add(new_pipeline)

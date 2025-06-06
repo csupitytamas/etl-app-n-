@@ -1,8 +1,8 @@
 from sqlalchemy import Column, Integer, String, DateTime, JSON
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
+from . import Base
 
-Base = declarative_base()
 
 class ETLConfig(Base):
     __tablename__ = "etlconfig"
@@ -34,4 +34,5 @@ class ETLConfig(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     modified_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     target_table_name = Column(String, nullable=True)
+    dag_id = Column(String, nullable=True)
 

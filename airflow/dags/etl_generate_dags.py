@@ -128,7 +128,8 @@ with engine.connect() as conn:
     pipelines = conn.execute(query).mappings().all()
 
 for pipeline in pipelines:
-    dag_id = f"{pipeline['pipeline_name'].replace(' ', '_').lower()}_{pipeline['id']}"
+    dag_id = pipeline['dag_id']
+    print(f"[ETL DAG CREATE] dag_id: {dag_id}")
     schedule = pipeline['schedule']
     custom_time = pipeline.get('custom_time')
 
@@ -144,7 +145,6 @@ for pipeline in pipelines:
         schedule_interval = None
 
 
-
     # DAG definition
     dag = DAG(
         dag_id=dag_id,
@@ -153,6 +153,7 @@ for pipeline in pipelines:
         schedule_interval=schedule_interval,
         start_date=datetime(2025, 1, 1),
         catchup=False,
+        is_paused_upon_creation=False
     )
     # Task definitions
     create_task = PythonOperator(
