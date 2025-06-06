@@ -15,7 +15,7 @@ class ETLConfigBase(BaseModel):
     dependency_pipeline_id: Optional[str] = None
 
     field_mappings: Optional[Dict[str, Any]] = None
-    transformation: Optional[str] = None
+    transformation: Optional[Dict[str, Any]] = None
     selected_columns: Optional[List[str]] = None
     group_by_columns: Optional[List[str]] = None
 

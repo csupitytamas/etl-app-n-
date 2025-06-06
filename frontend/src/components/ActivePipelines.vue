@@ -12,7 +12,7 @@
       </thead>
       <tbody>
       <tr v-for="(pipeline, index) in pipelines" :key="index">
-        <td>{{ pipeline.name }}</td>
+        <td>{{ pipeline.pipeline_name }}</td>
         <td>{{ pipeline.source }}</td>
         <td>
           <button @click="configurePipeline(pipeline)">
@@ -22,26 +22,46 @@
       </tr>
       </tbody>
     </table>
+  <button @click="goBack" class="action-button">Back</button>
   </div>
 </template>
 
 <script>
+import axios from 'axios';
+import {getAllPipelines} from "@/api/pipeline";
 export default {
   name: "ActivePipelines",
   data() {
     return {
-      pipelines: [
-        { name: "My pipeline", source: "API1"},
-        { name: "Your pipeline", source: "API2 + userfile"},
-        { name: "Our pipeline", source: "API3"}
-      ]
+      pipelines: []
     };
   },
-  methods: {
-    configurePipeline(pipeline) {
-      this.$router.push("/etl-config");
+  created() {
+    this.fetchPipelines();
+  },
+methods: {
+  async fetchPipelines() {
+    try {
+      const response = await getAllPipelines();
+      this.pipelines = response.data;
+    } catch (error) {
+      console.error("Error fetching pipelines:", error);
+    }
+  },
+  configurePipeline(pipeline) {
+    this.$router.push({
+      path: "/edit-config",
+      query: { id: pipeline.id }
+    });
+  },
+  goBack() {
+    if (window.history.length > 1) {
+      this.$router.go(-1);
+    } else {
+      this.$router.push('/');
     }
   }
+}
 };
 </script>
 
@@ -53,6 +73,21 @@ export default {
   background: #f2f2f2;
   border-radius: 10px;
   text-align: center;
+}
+.action-button {
+  width: 40%;
+  background-color: #007bff;
+  color: white;
+  padding: 10px;
+  border: none;
+  border-radius: 5px;
+  margin: 10px 0;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.action-button:hover {
+  background-color: #0056b3;
 }
 
 table {
