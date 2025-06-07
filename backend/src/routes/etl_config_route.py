@@ -1,10 +1,13 @@
+from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from src.schemas import  ETLConfigBase, ETLConfigUpdate, ETLConfigResponse
 from src.db.connection import get_db
-from src.models import ETLConfig, APISchema
-from src.utils.db_creation_util import generate_table_name, generate_dag_id
+from src.models import ETLConfig, APISchema, Status
+from src.utils.db_creation_util import generate_table_name, generate_dag_id, remove_version_suffix
 from src.constans.accepted_fields import ACCEPTED_ETL_FIELDS
+from src.common.airflow_client import pause_airflow_dag, unpause_airflow_dag
 
 
 router = APIRouter()
@@ -29,17 +32,29 @@ def create_pipeline(config: ETLConfigBase, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(new_pipeline)
         print("Pipeline successfully created:", new_pipeline.pipeline_name)
-
+        unpause_airflow_dag(new_pipeline.dag_id)
         return new_pipeline
 
     except Exception as e:
         print("Error:", e)
         raise HTTPException(status_code=500, detail=str(e))
 
+
+def attach_alias(pipeline: ETLConfig):
+    if pipeline.schema:
+        pipeline.alias = pipeline.schema.alias
+    return pipeline
+
 @router.get("/all", response_model=list[ETLConfigResponse])
 def get_all_pipelines(db: Session = Depends(get_db)):
-    pipelines = db.query(ETLConfig).all()
-    return pipelines
+    pipelines = (
+        db.query(ETLConfig)
+        .join(Status, ETLConfig.id == Status.etlconfig_id)
+        .filter(Status.current_status != "archived")  # csak ne legyen archivált
+        .all()
+    )
+    return [attach_alias(pipeline) for pipeline in pipelines]
+
 
 @router.post("/load/{pipeline_id}", response_model=ETLConfigResponse)
 def load_pipeline_data(pipeline_id: int, db: Session = Depends(get_db)):
@@ -54,26 +69,47 @@ def load_pipeline_data(pipeline_id: int, db: Session = Depends(get_db)):
 @router.post("/updated_pipeline/{pipeline_id}", response_model=ETLConfigResponse)
 def updated_pipeline(pipeline_id: int, config: ETLConfigUpdate, db: Session = Depends(get_db)):
     old_pipeline = db.query(ETLConfig).filter(ETLConfig.id == pipeline_id).first()
-
     if not old_pipeline:
         raise HTTPException(status_code=404, detail="Pipeline not found")
 
-    updated_data = config.dict(exclude_unset=True)
-    updated_data['source'] = old_pipeline.source
-    new_version = old_pipeline.version + 1
-    new_pipeline_name = f"{old_pipeline.pipeline_name} v{new_version}"
-    new_table_name = generate_table_name(new_pipeline_name, new_version)
-    dag_id = generate_dag_id(new_pipeline_name, new_version)  # << ÚJ dag_id a verzióhoz
+    try:
+        updated_data = config.dict(exclude_unset=True)
+        updated_data['source'] = old_pipeline.source
+        new_version = old_pipeline.version + 1
 
-    new_pipeline = ETLConfig(
-        **updated_data,
-        pipeline_name=new_pipeline_name,
-        version=new_version,
-        target_table_name=new_table_name,
-        dag_id=dag_id
-    )
+        base_pipeline_name = remove_version_suffix(old_pipeline.pipeline_name)
+        new_pipeline_name = f"{base_pipeline_name} v{new_version}"
+        new_table_name = generate_table_name(new_pipeline_name, new_version)
+        dag_id = generate_dag_id(new_pipeline_name, new_version)
 
-    db.add(new_pipeline)
-    db.commit()
-    db.refresh(new_pipeline)
-    return new_pipeline
+        new_pipeline = ETLConfig(
+            **updated_data,
+            pipeline_name=new_pipeline_name,
+            version=new_version,
+            target_table_name=new_table_name,
+            dag_id=dag_id
+        )
+
+        db.add(new_pipeline)
+        db.flush()              # Flush, hogy legyen ID, de még ne commit
+        db.refresh(new_pipeline)
+
+        old_status = db.query(Status).filter(Status.etlconfig_id == pipeline_id).first()
+        if old_status:
+            old_status.current_status = "archived"
+            old_status.updated_at = datetime.utcnow()
+
+        new_status = Status(
+            etlconfig_id=new_pipeline.id,
+            current_status="queued",
+            updated_at=datetime.utcnow()
+        )
+        db.add(new_status)
+        db.commit()
+        pause_airflow_dag(old_pipeline.dag_id)
+        unpause_airflow_dag(new_pipeline.dag_id)
+        return new_pipeline
+
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Pipeline update failed: {str(e)}")

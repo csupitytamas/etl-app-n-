@@ -42,6 +42,7 @@ class ETLConfigResponse(ETLConfigBase):
     version: int
     created_at: datetime
     modified_at: datetime
+    alias: Optional[str] = None
 
     class Config:
         from_attributes = True

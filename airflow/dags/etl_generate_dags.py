@@ -124,7 +124,11 @@ def load_data(pipeline_id, **kwargs):
 
 # Pipeline select and DAG generate
 with engine.connect() as conn:
-    query = sa.text("SELECT * FROM etlconfig")
+    query = sa.text("""
+        SELECT etl.*, s.current_status
+        FROM etlconfig etl
+        JOIN status s ON etl.id = s.etlconfig_id
+    """)
     pipelines = conn.execute(query).mappings().all()
 
 for pipeline in pipelines:
@@ -133,7 +137,10 @@ for pipeline in pipelines:
     schedule = pipeline['schedule']
     custom_time = pipeline.get('custom_time')
 
-   # Schedule interval based on pipeline configuration
+    # ÚJ: dinamikus paused logika
+    is_paused = pipeline['current_status'] == 'archived'
+
+    # Schedule interval based on pipeline configuration
     if schedule == "daily":
         schedule_interval = "@daily"
     elif schedule == "hourly":
@@ -144,7 +151,6 @@ for pipeline in pipelines:
     else:
         schedule_interval = None
 
-
     # DAG definition
     dag = DAG(
         dag_id=dag_id,
@@ -153,8 +159,9 @@ for pipeline in pipelines:
         schedule_interval=schedule_interval,
         start_date=datetime(2025, 1, 1),
         catchup=False,
-        is_paused_upon_creation=False
+        is_paused_upon_creation=is_paused  # <<< DINAMIKUSAN paused vagy nem!
     )
+
     # Task definitions
     create_task = PythonOperator(
         task_id=f"create_table_{pipeline['id']}",
