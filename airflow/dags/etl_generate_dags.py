@@ -4,41 +4,27 @@ from datetime import datetime, timedelta
 import sqlalchemy as sa
 import json
 import requests
-import time
 
-from transforms.generate_columns_from_field_mappings import generate_columns_from_field_mappings
-from src.database.connection import engine
-from transforms.etl_transforms import transform_data
+from transforms.field_mapping import field_mapping_helper
+from transforms.transfomations import field_mapping
 
-
-# --- ADATBÁZIS KAPCSOLAT ---
-# PostgreSQL connection string - hogyan éri el a program az adatbázist
+# PostgreSQL connection
 DB_URL = "postgresql+psycopg2://postgres:admin123@host.docker.internal:5433/ETL"
-
-# Létrehozzuk az SQLAlchemy engine-t az adatbázis eléréséhez
 engine = sa.create_engine(DB_URL)
 
-# --- AIRFLOW DEFAULT ARGUMENTUMOK ---
-# Minden DAG ezekkel az alapbeállításokkal indul, hacsak felül nem írjuk őket
 default_args = {
-    'owner': 'airflow',  # Ki a felelős a DAG-ért
-    'depends_on_past': False,  # Nem függ előző futások sikerétől
-    'retries': 3,  # Hányszor próbálja újra ha hibázik
-    'retry_delay': timedelta(minutes=5),  # Milyen időközzel próbálja újra
+    'owner': 'airflow',
+    'depends_on_past': False,
+    'retries': 1,
+    'retry_delay': timedelta(minutes=5),
 }
 
-
-# --- HELPER FÜGGVÉNYEK ---
-
+# JSON path parser
 def extract_from_path(data, path):
-    """
-    JSON adatban való keresés, megadott 'path' útvonal mentén.
-    Példa: 'user.address.city' --> data['user']['address']['city']
-    """
     keys = path.split('.')
     current = data
     for key in keys:
-        if '[' in key and ']' in key:  # Listák kezelése pl: data['items'][0]
+        if '[' in key and ']' in key:
             key_name, idx = key[:-1].split('[')
             current = current.get(key_name, [])
             idx = int(idx)
@@ -46,7 +32,7 @@ def extract_from_path(data, path):
                 current = current[idx]
             else:
                 return None
-        else:  # Dict kezelése
+        else:
             if isinstance(current, dict):
                 current = current.get(key, None)
             else:
@@ -55,55 +41,59 @@ def extract_from_path(data, path):
             return None
     return current
 
-
+# Create target table based on ETL config
 def create_table(pipeline_id, **kwargs):
-    """
-    Céltábla létrehozása az adatbázisban egy pipeline ID alapján.
-    Ha a tábla már létezik, először töröljük majd újra létrehozzuk (fejlesztői módban!).
-    """
     with engine.connect() as conn:
-        # Lekérdezzük az ETL pipeline konfigurációt az adatbázisból
-        query = sa.text("SELECT target_table_name, field_mappings FROM etlconfig WHERE id = :id")
+        query = sa.text("""
+            SELECT target_table_name, field_mappings, selected_columns, column_order
+            FROM etlconfig WHERE id = :id
+        """)
         result = conn.execute(query, {"id": pipeline_id}).mappings().first()
         if not result:
             raise Exception(f"Pipeline ID {pipeline_id} not found.")
 
         table_name = result['target_table_name']
         field_mappings = result['field_mappings']
+        selected_columns = result['selected_columns']
+        column_order = result['column_order']
 
-        # Ha a field_mappings JSON string, alakítsuk át dict-é
+        # JSON decode, ha szükséges
         if isinstance(field_mappings, str):
             field_mappings = json.loads(field_mappings)
+        if isinstance(selected_columns, str):
+            selected_columns = json.loads(selected_columns)
+        if isinstance(column_order, str):
+            column_order = json.loads(column_order)
 
-        # Generáljuk az oszlopneveket field_mappings alapján
-        column_names = generate_columns_from_field_mappings(field_mappings)
+        # Segédfüggvény meghívása!
+        final_columns = field_mapping_helper(
+            field_mappings,
+            selected_columns=selected_columns,
+            column_order=column_order
+        )
 
         column_defs = []
-        for col_name in column_names:
-            col_type = 'TEXT'  # Alapértelmezett adattípus (később bővíthető!)
-            column_defs.append(f'"{col_name}" {col_type}')
+        # Fontos: csak a végső oszloplista alapján generálunk oszlopokat
+        for col in final_columns:
+            # Ha rename-t használtál, vissza kell keresni az eredeti props-ot
+            # Ehhez néha vissza kell keresni a field_mappings-ben, de ha egyedi, akkor default TEXT
+            props = next((p for k, p in field_mappings.items()
+                          if (p.get("rename") and p.get("newName") == col) or k == col), {})
+            col_type = props.get('type', 'TEXT')
+            column_defs.append(f'"{col}" {col_type}')
 
-        # SQL parancs összerakása
         column_sql = ",\n  ".join(column_defs)
-
-        # --- FIGYELEM: fejlesztési célra, törli a meglévő táblát! ---
-        drop_sql = f'DROP TABLE IF EXISTS "{table_name}" CASCADE;'
         create_sql = f'''
-        CREATE TABLE "{table_name}" (
+        CREATE TABLE IF NOT EXISTS "{table_name}" (
           id SERIAL PRIMARY KEY,
           {column_sql}
         );
         '''
-        # Tábla törlése és újralétrehozása
-        conn.execute(sa.text(drop_sql))
         conn.execute(sa.text(create_sql))
-        print(f"Tábla újralétrehozva: {table_name}")
+        print(f"Tábla létrehozva vagy már létezett: {table_name}")
 
-
+# Data extraction from API
 def extract_data(pipeline_id, **kwargs):
-    """
-    API hívás: adatokat kér le egy külső forrásból és eltárolja XCom-ban.
-    """
     with engine.connect() as conn:
         query = sa.text("""
             SELECT source, field_mappings
@@ -118,26 +108,13 @@ def extract_data(pipeline_id, **kwargs):
     source_url = result['source']
     field_mappings = result['field_mappings']
 
-    # 3-szori próbálkozás ha hiba van
-    for attempt in range(3):
-        try:
-            response = requests.get(source_url)
-            if response.status_code == 200:
-                break  # Siker
-            else:
-                print(f"Attempt {attempt+1}: API error {response.status_code}")
-                time.sleep(5)
-        except Exception as e:
-            print(f"Attempt {attempt+1}: Exception {str(e)}")
-            time.sleep(5)
-    else:
-        raise Exception(f"API unreachable after 3 attempts: {source_url}")
+    response = requests.get(source_url)
+    if response.status_code != 200:
+        raise Exception(f"API Error: {response.status_code}")
 
-    # API válasz JSON formátumban
     data = response.json()
     extracted = []
 
-    # Adatok kigyűjtése field mapping alapján
     for item in data:
         record = {}
         for field in field_mappings:
@@ -147,66 +124,60 @@ def extract_data(pipeline_id, **kwargs):
             record[field_name] = value
         extracted.append(record)
 
-    # Mentés XCom-ba, hogy más task-ok (pl. transform) is elérjék
     kwargs['ti'].xcom_push(key='extracted_data', value=extracted)
 
+def transform_data(pipeline_id, **kwargs):
+    ti = kwargs['ti']
+    data = ti.xcom_pull(key='extracted_data', task_ids=f"extract_data_{pipeline_id}")
 
+    if not data:
+        raise Exception("Nincs adat az extractból!")
+
+    with engine.connect() as conn:
+        query = sa.text("SELECT field_mappings FROM etlconfig WHERE id = :id")
+        result = conn.execute(query, {"id": pipeline_id}).mappings().first()
+        field_mappings = result['field_mappings']
+        if isinstance(field_mappings, str):
+            field_mappings = json.loads(field_mappings)
+
+    # Csak meghívod a modult!
+    transformed = field_mapping(data, field_mappings)
+    ti.xcom_push(key='transformed_data', value=transformed)
+
+
+# Data load to target table
 def load_data(pipeline_id, **kwargs):
-    """
-    Transformált adatok betöltése a céltáblába.
-    """
-    # Lekérjük az átalakított adatokat XCom-ból
     data = kwargs['ti'].xcom_pull(key='transformed_data', task_ids=f"transform_data_{pipeline_id}")
 
     if not data:
-        raise Exception("No transformed data!")
-
-    valid_columns = list(data[0].keys()) if data else []
+        raise Exception("No data!")
 
     with engine.connect() as conn:
         query = sa.text("SELECT target_table_name FROM etlconfig WHERE id = :id")
         result = conn.execute(query, {"id": pipeline_id}).mappings().first()
         table_name = result['target_table_name']
 
-        # Soronkénti adatbeszúrás
         for row in data:
-            filtered_row = {key: value for key, value in row.items() if key in valid_columns}
-            if not filtered_row:
-                continue  # Ha üres, skip
-
-            # Dinamikus SQL beszúrás
             conn.execute(sa.text(
                 f'''
-                INSERT INTO "{table_name}" ({', '.join(f'"{key}"' for key in filtered_row.keys())})
-                VALUES ({', '.join(f':{key}' for key in filtered_row.keys())})
+                INSERT INTO "{table_name}" ({', '.join(f'"{key}"' for key in row.keys())})
+                VALUES ({', '.join(f':{key}' for key in row.keys())})
                 '''
-            ), filtered_row)
+            ), row)
+        print(f"{len(data)} Record is successfuly load  to {table_name} .")
 
-        print(f"{len(data)} records successfully loaded to {table_name}.")
-
-
-# --- DINAMIKUS DAG GENERÁLÁS ---
-
-# Az összes pipeline-t betöltjük az adatbázisból
+# Pipeline select and DAG generate
 with engine.connect() as conn:
-    query = sa.text("""
-        SELECT etl.*, s.current_status
-        FROM etlconfig etl
-        JOIN status s ON etl.id = s.etlconfig_id
-    """)
+    query = sa.text("SELECT * FROM etlconfig")
     pipelines = conn.execute(query).mappings().all()
 
-# Minden pipeline-ból egy külön DAG-ot hozunk létre
 for pipeline in pipelines:
     dag_id = pipeline['dag_id']
     print(f"[ETL DAG CREATE] dag_id: {dag_id}")
     schedule = pipeline['schedule']
     custom_time = pipeline.get('custom_time')
 
-    # Állapot alapján indítás
-    is_paused = pipeline['current_status'] == 'archived'
-
-    # Ütemezési logika
+   # Schedule interval based on pipeline configuration
     if schedule == "daily":
         schedule_interval = "@daily"
     elif schedule == "hourly":
@@ -215,20 +186,20 @@ for pipeline in pipelines:
         hour, minute = custom_time.split(':')
         schedule_interval = f"{int(minute)} {int(hour)} * * *"
     else:
-        schedule_interval = None  # Nem ütemezett
+        schedule_interval = None
 
-    # Létrehozzuk a DAG-ot
+
+    # DAG definition
     dag = DAG(
         dag_id=dag_id,
         description=f"DAG for {pipeline['pipeline_name']}",
         default_args=default_args,
         schedule_interval=schedule_interval,
-        start_date=datetime(2025, 1, 1),  # Bármilyen régi dátum, catchup kikapcsolva
+        start_date=datetime(2025, 1, 1),
         catchup=False,
-        is_paused_upon_creation=is_paused
+        is_paused_upon_creation=False
     )
-
-    # Task-ok definíciója
+    # Task definitions
     create_task = PythonOperator(
         task_id=f"create_table_{pipeline['id']}",
         python_callable=create_table,
@@ -247,7 +218,6 @@ for pipeline in pipelines:
         task_id=f"transform_data_{pipeline['id']}",
         python_callable=transform_data,
         op_args=[pipeline['id']],
-        op_kwargs={'engine': engine},
         dag=dag,
     )
 
@@ -258,8 +228,7 @@ for pipeline in pipelines:
         dag=dag,
     )
 
-    # Meghatározzuk a task sorrendet (dependency graph)
+    # Task dependencies
     create_task >> extract_task >> transform_task >> load_task
 
-    # Dinamikusan hozzáadjuk a DAG-ot a globals-hoz, hogy Airflow felismerje
     globals()[dag_id] = dag
