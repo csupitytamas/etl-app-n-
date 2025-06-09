@@ -1,8 +1,7 @@
 from sqlalchemy import Column, Integer, String, JSON, DateTime, Text
 from datetime import datetime
+from src.database.connection import Base
 
-
-from src.db.connection import Base
 
 class APISchema(Base):
     __tablename__ = "api_schemas"

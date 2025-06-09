@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from src.schemas import  ETLConfigBase, ETLConfigUpdate, ETLConfigResponse
-from src.db.connection import get_db
+from src.database.connection import get_db
 from src.models import ETLConfig, APISchema, Status
 from src.utils.db_creation_util import generate_table_name, generate_dag_id, remove_version_suffix
 from src.constans.accepted_fields import ACCEPTED_ETL_FIELDS

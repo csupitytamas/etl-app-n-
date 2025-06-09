@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 from src.models import Status, ETLConfig, APISchema
 from src.schemas  import DashboardPipelineResponse
-from src.db.connection import get_db
+from src.database.connection import get_db
 import pandas as pd  # Ha szeretnéd, de SQLAlchemy raw query is jó
 
 router = APIRouter()
