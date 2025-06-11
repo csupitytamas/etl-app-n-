@@ -6,7 +6,7 @@ import json
 import requests
 
 from transforms.field_mapping import field_mapping_helper
-from transforms.transfomations import field_mapping
+from transforms.transfomations import field_mapping, group_by, order_by, flatten_grouped_data
 
 # PostgreSQL connection
 DB_URL = "postgresql+psycopg2://postgres:admin123@host.docker.internal:5433/ETL"
@@ -82,10 +82,13 @@ def create_table(pipeline_id, **kwargs):
             col_type = props.get('type', 'TEXT')
             column_defs.append(f'"{col}" {col_type}')
 
+        if not column_defs:
+            raise Exception("A tábla nem hozható létre, mert nincs egyetlen oszlop sem a field mapping alapján!")
+
         column_sql = ",\n  ".join(column_defs)
         create_sql = f'''
         CREATE TABLE IF NOT EXISTS "{table_name}" (
-          id SERIAL PRIMARY KEY,
+          id SERIAL PRIMARY KEY{',' if column_sql else ''}
           {column_sql}
         );
         '''
@@ -134,23 +137,45 @@ def transform_data(pipeline_id, **kwargs):
         raise Exception("Nincs adat az extractból!")
 
     with engine.connect() as conn:
-        query = sa.text("SELECT field_mappings FROM etlconfig WHERE id = :id")
+        query = sa.text("SELECT field_mappings, group_by_columns, order_by_column, order_direction FROM etlconfig WHERE id = :id")
         result = conn.execute(query, {"id": pipeline_id}).mappings().first()
         field_mappings = result['field_mappings']
+        group_by_columns = result['group_by_columns']
+        order_by_column = result['order_by_column']
+        order_direction = result['order_direction']
+
         if isinstance(field_mappings, str):
             field_mappings = json.loads(field_mappings)
+        if isinstance(group_by_columns, str):
+            group_by_columns = json.loads(group_by_columns)
 
-    # Csak meghívod a modult!
+    # 1. Transzformáció
     transformed = field_mapping(data, field_mappings)
     ti.xcom_push(key='transformed_data', value=transformed)
 
+    # 2. Rendezés
+    if order_by_column:
+        ordered = order_by(transformed, [order_by_column], order_direction)
+    else:
+        ordered = transformed
+    ti.xcom_push(key='ordered_data', value=ordered)
+
+    # 3. Csoportosítás
+    if group_by_columns:
+        grouped = group_by(ordered, group_by_columns)
+        ti.xcom_push(key='group_by_data', value=grouped)
+        flattened = flatten_grouped_data(grouped)
+        ti.xcom_push(key='final_data', value=flattened)
+    else:
+        ti.xcom_push(key='final_data', value=ordered)
 
 # Data load to target table
 def load_data(pipeline_id, **kwargs):
-    data = kwargs['ti'].xcom_pull(key='transformed_data', task_ids=f"transform_data_{pipeline_id}")
+    ti = kwargs['ti']
+    data = ti.xcom_pull(key='final_data', task_ids=f"transform_data_{pipeline_id}")
 
     if not data:
-        raise Exception("No data!")
+        raise Exception("No data to load!")
 
     with engine.connect() as conn:
         query = sa.text("SELECT target_table_name FROM etlconfig WHERE id = :id")
@@ -164,7 +189,7 @@ def load_data(pipeline_id, **kwargs):
                 VALUES ({', '.join(f':{key}' for key in row.keys())})
                 '''
             ), row)
-        print(f"{len(data)} Record is successfuly load  to {table_name} .")
+        print(f"{len(data)} Record is successfully loaded to {table_name}.")
 
 # Pipeline select and DAG generate
 with engine.connect() as conn:
@@ -182,6 +207,16 @@ for pipeline in pipelines:
         schedule_interval = "@daily"
     elif schedule == "hourly":
         schedule_interval = "@hourly"
+    elif schedule == "weekly":
+        schedule_interval = "@weekly"
+    elif schedule == "monthly":
+        schedule_interval == "@monthly"
+    elif schedule == "yearly":
+        schedule_interval = "@yearly"
+    elif schedule == "once":
+        schedule_interval = "@once"
+    elif schedule == "never":
+        schedule_interval = None
     elif schedule == "custom" and custom_time:
         hour, minute = custom_time.split(':')
         schedule_interval = f"{int(minute)} {int(hour)} * * *"

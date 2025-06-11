@@ -7,8 +7,12 @@
       <label>Schedule</label>
       <select v-model="schedule">
         <option value="daily">daily</option>
+        <option value="yearly">yearly</option>
+        <option value="monthly">monthly</option>
+        <option value="weekly">weekly</option>
         <option value="hourly">hourly</option>
-        <option value="minutes">minutes</option>
+        <option value="once">once</option>
+        <option value="never">never</option>
         <option value="custom">custom</option>
       </select>
       <div v-if="schedule === 'custom'" class="custom-time-wrapper">
@@ -72,10 +76,11 @@
               <option v-for="sep in separatorOptions" :key="sep" :value="sep">{{ sep === ' ' ? 'space' : sep }}</option>
             </select>
 
-            <label><input type="checkbox" v-model="fieldMappings[col].concat.enabled" /> Concatenate</label>
+            <label><input type="checkbox" v-model="fieldMappings[col].concat.enabled" @change="onConcatEnableChange(col)" /> Concatenate</label>
             <div v-if="fieldMappings[col].concat.enabled" class="join-options">
               <label>With column:</label>
-              <select v-model="fieldMappings[col].concat.with">
+              <select v-model="fieldMappings[col].concat.with"
+                    @change="onConcatWithChange(col, fieldMappings[col].concat.with)">
                 <option disabled value="">Please select</option>
                 <option v-for="targetCol in allColumns" :key="targetCol" :value="targetCol">
                   {{ targetCol }}
@@ -236,6 +241,45 @@ export default defineComponent({
     const colSettingsOpen = ref<Record<string, boolean>>({});
     const separatorOptions = ref([" ", ",", ";", "-", "/", ":", "_"]);
 
+    const onConcatWithChange = (col, targetCol) => {
+    // 1. Ha targetCol üres, csak az aktuális oszlop enabled legyen false
+    if (!targetCol) {
+      fieldMappings.value[col].concat.enabled = false;
+      return;
+    }
+
+    // 2. Mindkét oszlopon enabled = true
+    fieldMappings.value[col].concat.enabled = true;
+    fieldMappings.value[targetCol].concat.enabled = true;
+
+    // 3. Csak az aktuális oszlopnál legyen kitöltve a with
+    fieldMappings.value[targetCol].concat.with = "";
+
+    // 4. Tisztítsd a többi mezőt is, ahol visszafelé lenne ilyen with (ne legyen kölcsönös összefűzés)
+    Object.keys(fieldMappings.value).forEach(otherCol => {
+      if (
+        otherCol !== col &&
+        fieldMappings.value[otherCol].concat.with === col
+      ) {
+        fieldMappings.value[otherCol].concat.with = "";
+      }
+    });
+  };
+
+    const onConcatEnableChange = (col) => {
+      const enabled = fieldMappings.value[col].concat.enabled;
+      const withCol = fieldMappings.value[col].concat.with;
+
+  // Ha kikapcsolod a checkboxot, akkor a pair-en is disabled
+      if (!enabled) {
+        if (withCol) {
+          fieldMappings.value[withCol].concat.enabled = false;
+          fieldMappings.value[withCol].concat.with = "";
+        }
+        fieldMappings.value[col].concat.with = "";
+      }
+    };
+
     onMounted(async () => {
   if (source) {
     try {
@@ -346,6 +390,8 @@ export default defineComponent({
       separatorOptions,
       disableGroupBy,
       disableOrderBy,
+      onConcatWithChange,
+      onConcatEnableChange,
       handleFileUpload,
       toggleSelectAll,
       toggleSettings,
