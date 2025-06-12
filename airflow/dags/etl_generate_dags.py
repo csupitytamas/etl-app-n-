@@ -5,6 +5,7 @@ import sqlalchemy as sa
 import json
 import requests
 
+from transforms.data_load import load_overwrite, load_append, load_upsert
 from transforms.field_mapping import field_mapping_helper
 from transforms.transfomations import field_mapping, group_by, order_by, flatten_grouped_data
 
@@ -45,17 +46,15 @@ def extract_from_path(data, path):
 def create_table(pipeline_id, **kwargs):
     with engine.connect() as conn:
         query = sa.text("""
-            SELECT target_table_name, field_mappings, selected_columns, column_order
+            SELECT target_table_name, field_mappings, selected_columns, column_order, update_mode
             FROM etlconfig WHERE id = :id
         """)
         result = conn.execute(query, {"id": pipeline_id}).mappings().first()
-        if not result:
-            raise Exception(f"Pipeline ID {pipeline_id} not found.")
-
         table_name = result['target_table_name']
         field_mappings = result['field_mappings']
         selected_columns = result['selected_columns']
         column_order = result['column_order']
+        update_mode = result['update_mode']
 
         # JSON decode, ha szükséges
         if isinstance(field_mappings, str):
@@ -73,14 +72,15 @@ def create_table(pipeline_id, **kwargs):
         )
 
         column_defs = []
-        # Fontos: csak a végső oszloplista alapján generálunk oszlopokat
         for col in final_columns:
-            # Ha rename-t használtál, vissza kell keresni az eredeti props-ot
-            # Ehhez néha vissza kell keresni a field_mappings-ben, de ha egyedi, akkor default TEXT
             props = next((p for k, p in field_mappings.items()
                           if (p.get("rename") and p.get("newName") == col) or k == col), {})
             col_type = props.get('type', 'TEXT')
-            column_defs.append(f'"{col}" {col_type}')
+            col_def = f'"{col}" {col_type}'
+            # Csak upsert esetén legyen UNIQUE
+            if update_mode == "upsert" and props.get('unique'):
+                col_def += " UNIQUE"
+            column_defs.append(col_def)
 
         if not column_defs:
             raise Exception("A tábla nem hozható létre, mert nincs egyetlen oszlop sem a field mapping alapján!")
@@ -178,18 +178,29 @@ def load_data(pipeline_id, **kwargs):
         raise Exception("No data to load!")
 
     with engine.connect() as conn:
-        query = sa.text("SELECT target_table_name FROM etlconfig WHERE id = :id")
+        query = sa.text("SELECT target_table_name, update_mode, field_mappings FROM etlconfig WHERE id = :id")
         result = conn.execute(query, {"id": pipeline_id}).mappings().first()
         table_name = result['target_table_name']
+        update_mode = result['update_mode']
+        field_mappings = result['field_mappings']
 
-        for row in data:
-            conn.execute(sa.text(
-                f'''
-                INSERT INTO "{table_name}" ({', '.join(f'"{key}"' for key in row.keys())})
-                VALUES ({', '.join(f':{key}' for key in row.keys())})
-                '''
-            ), row)
-        print(f"{len(data)} Record is successfully loaded to {table_name}.")
+
+        if isinstance(field_mappings, str):
+            field_mappings = json.loads(field_mappings)
+
+        unique_cols = [col for col, props in field_mappings.items() if props.get("unique")]
+
+
+        if update_mode == "overwrite":
+            load_overwrite(table_name, data, conn)
+        elif update_mode == "append":
+            load_append(table_name, data, conn)
+        elif update_mode == "upsert":
+            if not unique_cols:
+                raise Exception("Upsert módban legalább egy oszlopnál kötelező a unique mező!")
+            load_upsert(table_name, data, conn, unique_cols=unique_cols)
+
+    print(f"{len(data)} record került betöltésre a(z) {table_name} táblába ({update_mode} móddal).")
 
 # Pipeline select and DAG generate
 with engine.connect() as conn:

@@ -25,7 +25,7 @@ def create_pipeline(config: ETLConfigBase, db: Session = Depends(get_db)):
 
         filtered_data = {k: v for k, v in config.dict().items() if k in ACCEPTED_ETL_FIELDS}
         filtered_data["target_table_name"] = table_name
-        filtered_data["dag_id"] = dag_id  # << EZ a lényeg!
+        filtered_data["dag_id"] = dag_id  #
         new_pipeline = ETLConfig(**filtered_data, version=1)
 
         db.add(new_pipeline)

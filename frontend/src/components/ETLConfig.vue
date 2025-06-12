@@ -64,10 +64,11 @@
             <button class="settings-button" @click="toggleSettings(col)">⚙️</button>
           </div>
 
+
           <div v-if="colSettingsOpen[col]" class="mapping-settings">
             <label><input type="checkbox" v-model="fieldMappings[col].rename" /> Rename</label>
-            <input v-if="fieldMappings[col].rename" type="text" v-model="fieldMappings[col].newName" placeholder="New name" />
-
+            <input v-if="fieldMappings[col].rename" type="text" v-model="fieldMappings[col].newName" placeholder="New name" /><label>
+            <input type="checkbox" v-model="fieldMappings[col].unique" /> Unique </label>
             <label><input type="checkbox" v-model="fieldMappings[col].delete" /> Delete</label>
 
              <label><input type="checkbox" v-model="fieldMappings[col].split" /> Split</label>
