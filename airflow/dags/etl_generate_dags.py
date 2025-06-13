@@ -4,11 +4,11 @@ from datetime import datetime, timedelta
 import sqlalchemy as sa
 import json
 import requests
-
+import pandas as pd
 from transforms.data_load import load_overwrite, load_append, load_upsert
 from transforms.field_mapping import field_mapping_helper
 from transforms.transfomations import field_mapping, group_by, order_by, flatten_grouped_data
-
+from transforms.exporter import export_data
 # PostgreSQL connection
 DB_URL = "postgresql+psycopg2://postgres:admin123@host.docker.internal:5433/ETL"
 engine = sa.create_engine(DB_URL)
@@ -178,11 +178,13 @@ def load_data(pipeline_id, **kwargs):
         raise Exception("No data to load!")
 
     with engine.connect() as conn:
-        query = sa.text("SELECT target_table_name, update_mode, field_mappings FROM etlconfig WHERE id = :id")
+        query = sa.text("SELECT target_table_name, update_mode, field_mappings,file_format,save_option FROM etlconfig WHERE id = :id")
         result = conn.execute(query, {"id": pipeline_id}).mappings().first()
         table_name = result['target_table_name']
         update_mode = result['update_mode']
         field_mappings = result['field_mappings']
+        file_format = result['file_format']
+        save_option = result['save_option']
 
 
         if isinstance(field_mappings, str):
@@ -199,6 +201,11 @@ def load_data(pipeline_id, **kwargs):
             if not unique_cols:
                 raise Exception("Upsert módban legalább egy oszlopnál kötelező a unique mező!")
             load_upsert(table_name, data, conn, unique_cols=unique_cols)
+
+        if save_option == "createfile":
+            df = pd.DataFrame(data)
+            export_data(df, table_name, file_format)
+            print("Fájl exportálva:", table_name, file_format)
 
     print(f"{len(data)} record került betöltésre a(z) {table_name} táblába ({update_mode} móddal).")
 

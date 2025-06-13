@@ -183,14 +183,23 @@
     <div class="form-group">
       <label>Save options</label>
       <select v-model="saveOption">
-        <option value="todatabase">Database</option>
-        <option value="createfile">File</option>
+        <option value="todatabase">Only database</option>
+        <option value="createfile">Create file to</option>
       </select>
+    </div>
+
+    <div class="form-group" v-if="saveOption === 'createfile'">
+    <label>File format</label>
+    <select v-model="selectedFileFormat">
+      <option v-for="fmt in fileFormats" :key="fmt.value" :value="fmt.value">
+        {{ fmt.label }}
+      </option>
+    </select>
     </div>
 
     <div class="form-group">
       <button @click="submitPipelineConfig">Save</button>
-      <button @click="$router.go(-1)">Back</button>
+      <button @click="router.go(-1)">Back</button>
     </div>
   </div>
 </template>
@@ -241,6 +250,17 @@ export default defineComponent({
     const fieldMappings = ref<Record<string, any>>({});
     const colSettingsOpen = ref<Record<string, boolean>>({});
     const separatorOptions = ref([" ", ",", ";", "-", "/", ":", "_"]);
+
+    const fileFormats = ref([
+      { value: 'csv', label: 'CSV' },
+      { value: 'json', label: 'JSON' },
+      { value: 'parquet', label: 'Parquet' },
+      { value: 'excel', label: 'Excel (XLSX)' },
+      { value: 'txt', label: 'Plain text (TXT)' },
+      { value: 'xml', label: 'XML' },
+      { value: 'yaml', label: 'YAML' }
+    ]);
+    const selectedFileFormat = ref('csv');
 
     const onConcatWithChange = (col, targetCol) => {
     // 1. Ha targetCol üres, csak az aktuális oszlop enabled legyen false
@@ -358,6 +378,7 @@ export default defineComponent({
         order_by_column: disableOrderBy.value ? null : orderBy.value,
         order_direction: disableOrderBy.value ? null : orderDirection.value,
         custom_sql: transformation.value === 'advenced' ? customSQL.value : null,
+        file_format: saveOption.value === 'createfile' ? selectedFileFormat.value : null,
         transformation: {
           type: transformation.value }
       };
@@ -391,6 +412,8 @@ export default defineComponent({
       separatorOptions,
       disableGroupBy,
       disableOrderBy,
+      fileFormats,
+      selectedFileFormat,
       onConcatWithChange,
       onConcatEnableChange,
       handleFileUpload,

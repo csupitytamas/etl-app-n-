@@ -17,6 +17,7 @@ export interface ConfigData {
   column_order?: string[];
   update_mode: string;
   save_option: string;
+  file_format?: string | null;
 }
 
 export const usePipelineStore = defineStore('pipeline', {
@@ -32,7 +33,7 @@ export const usePipelineStore = defineStore('pipeline', {
       this.config = {
         schedule: 'daily',
         update_mode: 'append',
-        save_option: 'overwrite',
+        save_option: 'database',
       }
     }
   }

@@ -35,4 +35,5 @@ class ETLConfig(Base):
     modified_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     target_table_name = Column(String, nullable=True)
     dag_id = Column(String, nullable=True)
+    file_format = Column(String, nullable=True)
 

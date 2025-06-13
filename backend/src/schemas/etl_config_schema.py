@@ -27,6 +27,7 @@ class ETLConfigBase(BaseModel):
     save_option: str
 
     column_order: Optional[List[str]] = None
+    file_format: Optional[str] = None
 
 
 class ETLConfigUpdate(ETLConfigBase):
@@ -35,6 +36,7 @@ class ETLConfigUpdate(ETLConfigBase):
     schedule: Optional[str] = None
     update_mode: Optional[str] = None
     save_option: Optional[str] = None
+
 
 
 class ETLConfigResponse(ETLConfigBase):

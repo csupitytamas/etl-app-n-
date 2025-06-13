@@ -16,27 +16,32 @@ router = APIRouter()
 @router.post("/create", response_model=ETLConfigResponse)
 def create_pipeline(config: ETLConfigBase, db: Session = Depends(get_db)):
     try:
+        config_dict = config.dict()
+        filtered_data = {k: v for k, v in config_dict.items() if k in ACCEPTED_ETL_FIELDS}
+
         schema = db.query(APISchema).filter_by(source=config.source).first()
         if not schema:
             raise HTTPException(status_code=404, detail="No schema found for the selected source.")
-        table_name = generate_table_name(config.pipeline_name, version=1)
 
+        table_name = generate_table_name(config.pipeline_name, version=1)
         dag_id = generate_dag_id(config.pipeline_name, version=1)
 
-        filtered_data = {k: v for k, v in config.dict().items() if k in ACCEPTED_ETL_FIELDS}
         filtered_data["target_table_name"] = table_name
-        filtered_data["dag_id"] = dag_id  #
+        filtered_data["dag_id"] = dag_id
+
         new_pipeline = ETLConfig(**filtered_data, version=1)
 
         db.add(new_pipeline)
         db.commit()
         db.refresh(new_pipeline)
-        print("Pipeline successfully created:", new_pipeline.pipeline_name)
-        unpause_airflow_dag(new_pipeline.dag_id)
+
+        try:
+            unpause_airflow_dag(new_pipeline.dag_id)
+        except Exception as e:
+            print(f"⚠️ Nem sikerült unpause-olni a DAG-ot {new_pipeline.dag_id}: {e}", flush=True)
         return new_pipeline
 
     except Exception as e:
-        print("Error:", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
