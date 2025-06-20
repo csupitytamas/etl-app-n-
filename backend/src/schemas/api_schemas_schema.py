@@ -11,6 +11,9 @@ class APISchemaBase(BaseModel):
     alias: str | None = None
     description: str | None = None
 
+class SourceRequest(BaseModel):
+    source: str
+
 class SourceAlias(BaseModel):
     source: str
     alias: str | None = None
@@ -19,6 +22,5 @@ class SourceAlias(BaseModel):
     model_config = {
         "from_attributes": True}
 
-class SourceRequest(BaseModel):
-    source: str
+
 
