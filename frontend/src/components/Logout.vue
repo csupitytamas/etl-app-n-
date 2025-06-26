@@ -1,6 +1,6 @@
 <template>
   <div class="logout-container">
-    <p>Kijelentkezés folyamatban...</p>
+    <p>Logout is in process...</p>
   </div>
 </template>
 

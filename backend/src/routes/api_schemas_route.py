@@ -3,7 +3,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from src.database.connection import get_db
-from src.models import APISchema
+from src.models.api_schemas_model import APISchema
 from src.schemas.api_schemas_schema import  SourceAlias,  SourceRequest
 import json
 from src.services.etl_loader import load_to_target_table

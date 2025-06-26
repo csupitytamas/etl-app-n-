@@ -30,6 +30,7 @@ class ETLConfigBase(BaseModel):
     file_format: Optional[str] = None
 
 
+
 class ETLConfigUpdate(ETLConfigBase):
     pipeline_name: Optional[str] = None
     source: Optional[str] = None
@@ -45,6 +46,7 @@ class ETLConfigResponse(ETLConfigBase):
     created_at: datetime
     modified_at: datetime
     alias: Optional[str] = None
+    user_id: int
 
     class Config:
         from_attributes = True

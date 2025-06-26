@@ -14,12 +14,17 @@
 
     <div class="form-group">
       <input type="checkbox" v-model="stayLoggedIn" id="stay" />
-      <label for="stay">Maradjak bejelentkezve</label>
+      <label for="stay">Remember Me</label>
     </div>
 
     <div v-if="error" class="error-message">{{ error }}</div>
 
-    <button @click="login">Bejelentkezés</button>
+    <button @click="login">Sign in</button>
+    <div class="register-redirect">
+      <p> You don't have an account?
+        <router-link to="/register">Sign UP</router-link>
+      </p>
+    </div>
   </div>
 </template>
 
@@ -43,7 +48,6 @@ const login = async () => {
     const response = await loginUser(email.value, password.value, stayLoggedIn.value)
     const { token, user_id } = response.data
 
-    // Tárolás a választás szerint
     if (stayLoggedIn.value) {
       localStorage.setItem('auth_token', token)
       localStorage.setItem('user_id', user_id)
@@ -52,12 +56,16 @@ const login = async () => {
       sessionStorage.setItem('user_id', user_id)
     }
 
-    alert('Sikeres bejelentkezés!')
     await userStore.loadUser()
-    router.push('/')
+    alert('Successfully login!')
+
+    // 🔁 Biztos átirányítás Electronban is:
+    setTimeout(() => {
+      window.location.hash = '#/'  // működik hash routerrel
+    }, 200)
 
   } catch (err) {
-    error.value = err.response?.data?.detail || 'Hiba a bejelentkezés során.'
+    error.value = err.response?.data?.detail || 'Error in login.'
   }
 }
 </script>
@@ -87,5 +95,20 @@ button {
 .error-message {
   color: red;
   margin-bottom: 10px;
+}
+
+.register-redirect {
+  margin-top: 1.5rem;
+  text-align: center;
+}
+
+.register-redirect a {
+  color: #1976d2;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+.register-redirect a:hover {
+  text-decoration: underline;
 }
 </style>

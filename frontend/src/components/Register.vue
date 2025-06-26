@@ -19,7 +19,12 @@
 
     <div v-if="error" class="error-message">{{ error }}</div>
 
-    <button @click="register">Register</button>
+    <button @click="register">Sign UP</button>
+     <div class="login-redirect">
+      <p>You already have an account?
+        <router-link to="/login">Sign In</router-link>
+      </p>
+    </div>
   </div>
 </template>
 
@@ -37,14 +42,13 @@ const error = ref('')
 const register = async () => {
   error.value = ''
   if (password.value !== confirmPassword.value) {
-    error.value = 'A jelszavak nem egyeznek!'
+    error.value = 'Passwords do not match!'
     return
   }
 
   try {
     await registerUser(email.value, password.value)
-    alert('Sikeres regisztráció!')
-    // opcionálisan redirect pl.: router.push('/login')
+    alert('Successfully register!')
   } catch (err) {
     error.value = err.response?.data?.detail || 'Hiba történt a regisztráció során.'
   }
@@ -75,5 +79,20 @@ button {
 .error-message {
   color: red;
   margin-bottom: 10px;
+}
+
+.login-redirect {
+  margin-top: 1.5rem;
+  text-align: center;
+}
+
+.login-redirect a {
+  color: #1976d2;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+.login-redirect a:hover {
+  text-decoration: underline;
 }
 </style>

@@ -1,24 +1,30 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
-from src.models import Status, ETLConfig, APISchema
+from src.models.status_model import Status
+from src.models.etl_config_model import ETLConfig
+from src.models.api_schemas_model import APISchema
 from src.schemas  import DashboardPipelineResponse
 from src.database.connection import get_db
-import pandas as pd  # Ha szeretnéd, de SQLAlchemy raw query is jó
+from src.schemas.auth_schema import TokenData
+from src.utils.auth_helper import validate_token
+import pandas as pd
 
 router = APIRouter()
 
-
 @router.get("/dashboard", response_model=list[DashboardPipelineResponse])
-def get_dashboard(db: Session = Depends(get_db)):
+def get_dashboard(
+    db: Session = Depends(get_db),
+    current_user: TokenData = Depends(validate_token)   # <-- HOZZÁADNI!
+):
     pipelines = (
         db.query(ETLConfig)
+        .filter(ETLConfig.user_id == current_user.user_id)  # <-- FELHASZNÁLÓI SZŰRÉS!
         .outerjoin(Status, ETLConfig.id == Status.etlconfig_id)
         .outerjoin(APISchema, ETLConfig.source == APISchema.source)
         .options(joinedload(ETLConfig.schema))
-        .options(joinedload(ETLConfig.status))  # Fontos a status is!
+        .options(joinedload(ETLConfig.status))
         .all()
     )
-
     result = []
     for pipeline in pipelines:
         sample_data = []
@@ -30,7 +36,6 @@ def get_dashboard(db: Session = Depends(get_db)):
             except Exception:
                 sample_data = []
 
-        # Itt választjuk ki az első státuszt
         status = pipeline.status[0] if pipeline.status else None
 
         result.append({
