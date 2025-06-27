@@ -13,6 +13,7 @@ from src.constans.accepted_fields import ACCEPTED_ETL_FIELDS
 from src.common.airflow_client import pause_airflow_dag, unpause_airflow_dag
 from src.schemas.auth_schema import TokenData
 from src.utils.auth_helper import validate_token
+from datetime import datetime
 
 
 router = APIRouter()

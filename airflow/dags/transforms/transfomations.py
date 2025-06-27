@@ -1,62 +1,28 @@
 
-def field_mapping(data, field_mappings):
+def field_mapping(data, col_rename_map, final_columns):
     """
-    Teljes adatsorra alkalmazza a field_mappings szabályokat,
-    támogatva: törlés, átnevezés, concat (tetszőleges szeparátorral).
+    Kifejezetten úgy írjuk meg, hogy:
+      - csak a végleges oszlopneveket tartalmazza a visszaadott dict
+      - csak azok a kulcsok maradnak, amik a final_columns-ban vannak
+      - minden átnevezés, törlés, sorrend kezelve
     """
-    print("\n======= FIELD_MAPPING DEBUG =======")
-    print("FIELD_MAPPINGS:", field_mappings)
-    print("INPUT DATA SAMPLE:", data[:1])  # csak egy sort printelünk, ha nagy a data
+    print("\n======= FIELD_MAPPING (pro) =======")
+    print("RENAME_MAP:", col_rename_map)
+    print("FINAL_COLUMNS:", final_columns)
+    print("INPUT DATA SAMPLE:", data[:1])
     transformed = []
 
-    concat_pairs = set()
     for i, row in enumerate(data):
-        print(f"\n--- Row {i+1} ---")
-        print("INPUT ROW:", row)
         new_row = {}
-        '''
-        # Concat-olt oszlopok
-        for col, props in field_mappings.items():
-            concat = props.get("concat", {})
-            if concat.get("enabled", False):
-                with_col = concat["with"]
-                pair = tuple(sorted([col, with_col]))
-                if pair in concat_pairs:
-                    print(f"[{col}] + [{with_col}] pair ALREADY HANDLED -> SKIP")
-                    continue
-                concat_pairs.add(pair)
-                first = props["newName"] if props.get("rename", False) and props.get("newName") else col
-                with_props = field_mappings.get(with_col, {})
-                second = with_props["newName"] if with_props.get("rename", False) and with_props.get("newName") else with_col
-                sep = concat["separator"]
-                concat_col = f"{first}{sep}{second}".strip()
-                val1 = row.get(col, "")
-                val2 = row.get(with_col, "")
-                new_val = f"{val1}{sep}{val2}".strip()
-                print(f" -> CONCAT: '{concat_col}' = '{val1}' + '{sep}' + '{val2}' -> '{new_val}'")
-                new_row[concat_col] = new_val
-                
-                '''
-
-        for col, value in row.items():
-            props = field_mappings.get(col, {})
-            if props.get("delete", False):
-                print(f"SKIP [{col}] - marked for delete")
-                continue
-            if props.get("concat", {}).get("enabled", False):
-                print(f"SKIP [{col}] - handled by concat")
-                continue
-            if props.get("rename", False) and props.get("newName"):
-                new_col = props["newName"]
-                print(f"RENAME [{col}] -> [{new_col}] = '{value}'")
-            else:
-                new_col = col
-                print(f"KEEP [{col}] = '{value}'")
-            new_row[new_col] = value
-        print("NEW_ROW:", new_row)
-        transformed.append(new_row)
-    print("\nALL TRANSFORMED ROWS (first 3):", transformed[:3])
-    print("======= FIELD_MAPPING DEBUG END =======\n")
+        for orig_col, final_col in col_rename_map.items():
+            if final_col in final_columns:
+                value = row.get(orig_col, row.get(final_col))
+                new_row[final_col] = value
+        # Csak a végleges sorrenddel
+        ordered_row = {col: new_row.get(col) for col in final_columns}
+        print(f"TRANSFORMED ROW {i+1}:", ordered_row)
+        transformed.append(ordered_row)
+    print("======= FIELD_MAPPING END =======\n")
     return transformed
 
 
