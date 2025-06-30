@@ -71,29 +71,36 @@
             <input type="checkbox" v-model="fieldMappings[col].unique" /> Unique </label>
             <label><input type="checkbox" v-model="fieldMappings[col].delete" /> Delete</label>
 
-             <label><input type="checkbox" v-model="fieldMappings[col].split" /> Split</label>
-            <select v-if="fieldMappings[col].split" v-model="fieldMappings[col].separator">
-              <option disabled value="">Please select</option>
-              <option v-for="sep in separatorOptions" :key="sep" :value="sep">{{ sep === ' ' ? 'space' : sep }}</option>
-            </select>
-
-            <label><input type="checkbox" v-model="fieldMappings[col].concat.enabled" @change="onConcatEnableChange(col)" /> Concatenate</label>
-            <div v-if="fieldMappings[col].concat.enabled" class="join-options">
-              <label>With column:</label>
-              <select v-model="fieldMappings[col].concat.with"
+            <label>
+                  <input type="checkbox"
+                    v-model="fieldMappings[col].concat.enabled"
+                    @change="onConcatEnableChange(col)" /> Concatenate
+                </label>
+                <div v-if="fieldMappings[col].concat.enabled" class="join-options">
+                  <label>With column:</label>
+                  <select
+                    v-model="fieldMappings[col].concat.with"
                     @change="onConcatWithChange(col, fieldMappings[col].concat.with)">
-                <option disabled value="">Please select</option>
-                <option v-for="targetCol in allColumns" :key="targetCol" :value="targetCol">
-                  {{ targetCol }}
-                </option>
-              </select>
+                    <option disabled value="">Please select</option>
+                    <option
+                      v-for="targetCol in allColumns"
+                      :key="targetCol"
+                      :value="targetCol"
+                      :disabled="targetCol === col">
+                      {{ targetCol }}
+                    </option>
+                  </select>
 
-              <label>Separator:</label>
-              <select v-model="fieldMappings[col].concat.separator">
-                <option disabled value="">Please select</option>
-                <option v-for="sep in separatorOptions" :key="sep" :value="sep">{{ sep === ' ' ? 'space' : sep }}</option>
-              </select>
-            </div>
+                  <label>Separator:</label>
+                  <select
+                    v-model="fieldMappings[col].concat.separator"
+                    @change="onConcatSeparatorChange(col)">
+                    <option disabled value="">Please select</option>
+                    <option v-for="sep in separatorOptions" :key="sep" :value="sep">
+                      {{ sep === ' ' ? 'space' : sep }}
+                    </option>
+                  </select>
+                </div>
           </div>
         </div>
       </template>
@@ -249,7 +256,7 @@ export default defineComponent({
 
     const fieldMappings = ref<Record<string, any>>({});
     const colSettingsOpen = ref<Record<string, boolean>>({});
-    const separatorOptions = ref([" ", ",", ";", "-", "/", ":", "_"]);
+    const separatorOptions = ref([" ", "_"]);
 
     const fileFormats = ref([
       { value: 'csv', label: 'CSV' },
@@ -262,42 +269,55 @@ export default defineComponent({
     ]);
     const selectedFileFormat = ref('csv');
 
-    const onConcatWithChange = (col, targetCol) => {
-    // 1. Ha targetCol üres, csak az aktuális oszlop enabled legyen false
-    if (!targetCol) {
-      fieldMappings.value[col].concat.enabled = false;
-      return;
-    }
-
-    // 2. Mindkét oszlopon enabled = true
-    fieldMappings.value[col].concat.enabled = true;
-    fieldMappings.value[targetCol].concat.enabled = true;
-
-    // 3. Csak az aktuális oszlopnál legyen kitöltve a with
-    fieldMappings.value[targetCol].concat.with = "";
-
-    // 4. Tisztítsd a többi mezőt is, ahol visszafelé lenne ilyen with (ne legyen kölcsönös összefűzés)
-    Object.keys(fieldMappings.value).forEach(otherCol => {
-      if (
-        otherCol !== col &&
-        fieldMappings.value[otherCol].concat.with === col
-      ) {
-        fieldMappings.value[otherCol].concat.with = "";
+      // --- 1. Legfontosabb metódus: CONCAT pár szinkron ---
+    const onConcatWithChange = (col: string, targetCol: string) => {
+      if (!targetCol) {
+        fieldMappings.value[col].concat.enabled = false;
+        fieldMappings.value[col].concat.with = "";
+        return;
       }
-    });
-  };
 
-    const onConcatEnableChange = (col) => {
+      // 1. Mindkettő enabled legyen
+      fieldMappings.value[col].concat.enabled = true;
+      fieldMappings.value[targetCol].concat.enabled = true;
+
+      // 2. Mindkettő with értéke legyen kölcsönösen egymás
+      fieldMappings.value[col].concat.with = targetCol;
+      fieldMappings.value[targetCol].concat.with = col;
+
+      // 3. Szeparátort szinkronizáljuk
+      fieldMappings.value[targetCol].concat.separator = fieldMappings.value[col].concat.separator;
+
+      // 4. Minden egyéb oszlopból töröljük a concat párost, ami ezzel ütközhet
+      Object.keys(fieldMappings.value).forEach(otherCol => {
+        if (
+          otherCol !== col &&
+          otherCol !== targetCol &&
+          (fieldMappings.value[otherCol].concat.with === col || fieldMappings.value[otherCol].concat.with === targetCol)
+        ) {
+          fieldMappings.value[otherCol].concat.enabled = false;
+          fieldMappings.value[otherCol].concat.with = "";
+        }
+      });
+    };
+
+    // --- 2. Ha a concat enable-t kapcsoljuk ki, a párját is resetelni kell! ---
+    const onConcatEnableChange = (col: string) => {
       const enabled = fieldMappings.value[col].concat.enabled;
       const withCol = fieldMappings.value[col].concat.with;
-
-  // Ha kikapcsolod a checkboxot, akkor a pair-en is disabled
-      if (!enabled) {
-        if (withCol) {
-          fieldMappings.value[withCol].concat.enabled = false;
-          fieldMappings.value[withCol].concat.with = "";
-        }
+      if (!enabled && withCol) {
+        fieldMappings.value[withCol].concat.enabled = false;
+        fieldMappings.value[withCol].concat.with = "";
+        fieldMappings.value[withCol].concat.separator = " ";
         fieldMappings.value[col].concat.with = "";
+      }
+    };
+
+    // --- 3. Szeparátor változásának szinkronizálása ---
+    const onConcatSeparatorChange = (col: string) => {
+      const withCol = fieldMappings.value[col].concat.with;
+      if (withCol) {
+        fieldMappings.value[withCol].concat.separator = fieldMappings.value[col].concat.separator;
       }
     };
 
@@ -416,6 +436,7 @@ export default defineComponent({
       selectedFileFormat,
       onConcatWithChange,
       onConcatEnableChange,
+      onConcatSeparatorChange,
       handleFileUpload,
       toggleSelectAll,
       toggleSettings,

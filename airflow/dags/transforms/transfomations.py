@@ -1,29 +1,46 @@
-
-def field_mapping(data, col_rename_map, final_columns):
-    """
-    Kifejezetten úgy írjuk meg, hogy:
-      - csak a végleges oszlopneveket tartalmazza a visszaadott dict
-      - csak azok a kulcsok maradnak, amik a final_columns-ban vannak
-      - minden átnevezés, törlés, sorrend kezelve
-    """
-    print("\n======= FIELD_MAPPING (pro) =======")
-    print("RENAME_MAP:", col_rename_map)
-    print("FINAL_COLUMNS:", final_columns)
-    print("INPUT DATA SAMPLE:", data[:1])
+def field_mapping(data, col_rename_map, final_columns, field_mappings=None):
     transformed = []
-
     for i, row in enumerate(data):
-        new_row = {}
-        for orig_col, final_col in col_rename_map.items():
-            if final_col in final_columns:
-                value = row.get(orig_col, row.get(final_col))
-                new_row[final_col] = value
-        # Csak a végleges sorrenddel
+        # 1. Eredeti sor kibővítve az átnevezett kulcsokkal is
+        new_row = dict(row)
+        for orig, renamed in col_rename_map.items():
+            if orig != renamed:
+                new_row[renamed] = row.get(orig, "")
+
+        concat_done = set()
+
+        # 2. Concat és egyéb logika már csak az új_row-on dolgozzon!
+        for orig_col, props in field_mappings.items():
+            concat = props.get("concat", {})
+            if concat.get("enabled", False):
+                other_col = concat.get("with")
+                pair = tuple(sorted([orig_col, other_col])) if other_col else None
+                if other_col and field_mappings.get(other_col, {}).get("concat", {}).get("enabled", False):
+                    if pair in concat_done:
+                        continue
+                    concat_done.add(pair)
+                    sep = concat.get("separator", " ")
+                    # Itt már a végső, átnevezett mezőneveket használjuk:
+                    col1 = props.get("newName") or orig_col
+                    col2 = field_mappings[other_col].get("newName") or other_col
+                    new_col_name = f"{col1}_{col2}"
+                    value1 = new_row.get(col1, "")
+                    value2 = new_row.get(col2, "")
+                    new_row[new_col_name] = f"{value1}{sep}{value2}"
+                    continue
+
+            if props.get("delete", False):
+                continue
+            final_col = props.get("newName") if props.get("rename", False) and props.get("newName") else orig_col
+            if final_col in new_row:
+                continue
+            new_row[final_col] = row.get(orig_col)
+
         ordered_row = {col: new_row.get(col) for col in final_columns}
-        print(f"TRANSFORMED ROW {i+1}:", ordered_row)
         transformed.append(ordered_row)
-    print("======= FIELD_MAPPING END =======\n")
+
     return transformed
+
 
 
 def group_by(data, group_by_columns):

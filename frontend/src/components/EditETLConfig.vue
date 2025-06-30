@@ -241,7 +241,7 @@ export default defineComponent({
 
     const fieldMappings = ref<Record<string, any>>({});
     const colSettingsOpen = ref<Record<string, boolean>>({});
-    const separatorOptions = ref([" ", ",", ";", "-", "/", ":", "_"]);
+    const separatorOptions = ref([" ", "_"]);
 
     onMounted(async () => {
       if (pipelineId) {

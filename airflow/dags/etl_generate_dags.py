@@ -1,5 +1,4 @@
 from numpy.distutils.conv_template import unique_key
-
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from datetime import datetime, timedelta
@@ -8,7 +7,8 @@ import json
 import requests
 import pandas as pd
 from transforms.data_load import load_overwrite, load_append, load_upsert
-from transforms.field_mapping import field_mapping_helper, get_final_selected_columns, get_final_column_order
+from transforms.field_mapping import field_mapping_helper, get_final_selected_columns, get_final_column_order, \
+    resolve_final_column_name, get_concat_columns, get_all_final_columns
 from transforms.transfomations import field_mapping, group_by, order_by, flatten_grouped_data
 from transforms.exporter import export_data
 # PostgreSQL connection
@@ -86,15 +86,24 @@ def create_table(pipeline_id, **kwargs):
 
         unique_cols = [col for col, props in field_mappings.items() if props.get("unique")] if field_mappings else []
         print(f"[CREATE_TABLE] Unique oszlopok: {unique_cols}")
+        concat_cols = get_concat_columns(field_mappings)
+        print(f"[CREATE_TABLE] Concat cols: {concat_cols}")
         final_selected_columns = get_final_selected_columns(selected_columns, field_mappings)
         print(f"[CREATE_TABLE] final_selected_columns: {final_selected_columns}")
+
         final_column_order = get_final_column_order(column_order, field_mappings)
         print(f"[CREATE_TABLE] final_column_order: {final_column_order}")
-        final_columns = field_mapping_helper(
-            field_mappings,
+
+        print("create_table - selected_columns:", selected_columns)
+        print("create_table - column_order:", column_order)
+        print("create_table - field_mappings:", field_mappings)
+
+        final_columns = get_all_final_columns(
             selected_columns=final_selected_columns,
-            column_order=final_column_order
+            column_order=final_column_order,
+            field_mappings=field_mappings
         )
+
         print(f"[CREATE_TABLE] FINAL COLUMNS: {final_columns}")
 
         # Átnevezési mapping: eredeti név -> végleges név
@@ -160,6 +169,7 @@ def create_table(pipeline_id, **kwargs):
         ti.xcom_push(key='order_by_column', value=mapped_order_by_column)
         ti.xcom_push(key='order_direction', value=order_direction)
         ti.xcom_push(key='unique_cols', value=unique_cols)
+        ti.xcom_push(key='field_mappings', value=field_mappings)
 
 # Data extraction from API
 def extract_data(pipeline_id, **kwargs):
@@ -210,6 +220,8 @@ def transform_data(pipeline_id, **kwargs):
     group_by_columns = ti.xcom_pull(key='group_by_columns', task_ids=f"create_table_{pipeline_id}")
     order_by_column = ti.xcom_pull(key='order_by_column', task_ids=f"create_table_{pipeline_id}")
     order_direction = ti.xcom_pull(key='order_direction', task_ids=f"create_table_{pipeline_id}")
+    # ÚJ: field_mappings beolvasása
+    field_mappings = ti.xcom_pull(key='field_mappings', task_ids=f"create_table_{pipeline_id}")
 
     print(f"[TRANSFORM_DATA] final_columns: {final_columns}")
     print(f"[TRANSFORM_DATA] col_rename_map: {col_rename_map}")
@@ -220,8 +232,10 @@ def transform_data(pipeline_id, **kwargs):
         print("[TRANSFORM_DATA] ERROR: Hiányzik a végleges szerkezet vagy mapping!")
         raise Exception("Nincs végleges szerkezet vagy mapping! Ellenőrizd a create_table task XCom push-okat!")
 
-    # 1. Field mapping (átnevezés, törlés, sorrend)
-    transformed = field_mapping(data, col_rename_map, final_columns)
+    # 1. Field mapping (átnevezés, törlés, sorrend, CONCAT is!)
+    transformed = field_mapping(
+        data, col_rename_map, final_columns, field_mappings=field_mappings
+    )
     print(f"[TRANSFORM_DATA] Transformed (mapped) data (sample): {transformed[:2]}")
     ti.xcom_push(key='transformed_data', value=transformed)
 
@@ -250,6 +264,7 @@ def transform_data(pipeline_id, **kwargs):
     else:
         print("[TRANSFORM_DATA] No group by applied, final data is ordered data.")
         ti.xcom_push(key='final_data', value=ordered)
+
 # Data load to target table
 def load_data(pipeline_id, **kwargs):
     print(f"\n=== [LOAD_DATA] pipeline_id: {pipeline_id} ===")
