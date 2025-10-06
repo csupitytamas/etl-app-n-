@@ -6,11 +6,10 @@ Frontend start:
 cd frontend
 npm run dev
 npm start
-
-```
 ```
 Backend start:
 (FastAPI)
+
 ```sh
 cd backend
 uvicorn src.main:app --reload --log-level debug
